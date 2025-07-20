@@ -124,6 +124,16 @@ class DBHandler(context: Context) : SQLiteOpenHelper(
         idCursor.close()
         db.close()
     }
+    fun renamePlaylist(oldName: String, newName: String): Boolean {
+        val db = writableDatabase
+        val values = ContentValues().apply {
+            put(KEY_PLAYLIST_NAME, newName)
+        }
+        val rows = db.update(TABLE_PLAYLISTS, values, "$KEY_PLAYLIST_NAME=?", arrayOf(oldName))
+        db.close()
+        return rows > 0
+    }
+
 
     fun getAllPlaylists(): List<String> {
         val db = readableDatabase

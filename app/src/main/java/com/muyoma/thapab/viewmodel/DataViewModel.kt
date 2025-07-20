@@ -10,14 +10,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
-import androidx.lifecycle.ViewModel
 import com.muyoma.thapab.R
 import com.muyoma.thapab.data.DBHandler
 import com.muyoma.thapab.models.Playlist
 import com.muyoma.thapab.models.Song
 import com.muyoma.thapab.service.PlayerController
 import com.muyoma.thapab.service.PlayerService
-import com.muyoma.thapab.ui.composables.PlayLister
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -32,6 +30,8 @@ class DataViewModel(application: Application) : AndroidViewModel(application) {
     val currentSong: StateFlow<Song?> = _currentSong.asStateFlow()
     val _showPlayer = PlayerController._isPlaying
     val showPlayer: StateFlow<Boolean> = _showPlayer.asStateFlow()
+    var _playLists = MutableStateFlow<List<Playlist>>(emptyList())
+    var playlists = _playLists.asStateFlow()
     private val _likedSongs = MutableStateFlow<List<Song>>(emptyList())
     val likedSongs = _likedSongs.asStateFlow()
     val context = application.applicationContext
@@ -43,6 +43,7 @@ class DataViewModel(application: Application) : AndroidViewModel(application) {
     }
     init {
         refreshLikedSongs()
+        loadPlaylistsFromDB()
     }
 
 
@@ -69,6 +70,7 @@ class DataViewModel(application: Application) : AndroidViewModel(application) {
     }
     fun createPlaylist(name: String) {
         dbHandler.createPlaylist(name)
+        loadPlaylistsFromDB()
     }
 
     fun deletePlaylist(name: String) {
@@ -227,47 +229,26 @@ class DataViewModel(application: Application) : AndroidViewModel(application) {
         private set
 
 
-    var samplePlaylists by mutableStateOf(
-             listOf(
-                Playlist(
-                    id = 1L,
-                    title = "Chill Vibes",
-                    songs = 15,
-                    duration = 52.3,
-                    thumbnail = R.drawable.bg4
-                ),
-                Playlist(
-                    id = 2L,
-                    title = "Workout Hits",
-                    songs = 20,
-                    duration = 70.0,
-                    thumbnail = R.drawable.bg2
-                ),
-                Playlist(
-                    id = 3L,
-                    title = "Retro Classics",
-                    songs = 12,
-                    duration = 48.2,
-                    thumbnail = R.drawable.bg
-                ),
-                Playlist(
-                    id = 4L,
-                    title = "Afro Beats",
-                    songs = 18,
-                    duration = 61.5,
-                    thumbnail = R.drawable.bg3
-                ),
-                Playlist(
-                    id = 5L,
-                    title = "Late Night",
-                    songs = 10,
-                    duration = 42.0,
-                    thumbnail = R.drawable.bg4
-                )
+    fun loadPlaylistsFromDB() {
+        val playlists = dbHandler.getAllPlaylists().mapIndexed { index, name ->
+            val songs = getSongsFromPlaylist(name)
+            Playlist(
+                id = index.toLong(), // or use hash(name) or rowid if available
+                title = name,
+                songs = songs.size,
+                thumbnail = pickThumbnailFor(name, index),
             )
+        }
+        _playLists.value = playlists
+    }
+    private fun pickThumbnailFor(name: String, index: Int): Int {
+        val thumbnails = listOf(
+            R.drawable.bg, R.drawable.bg2, R.drawable.bg3, R.drawable.bg4
+        )
+        return thumbnails[index % thumbnails.size]
+    }
 
-    )
-        private set
+
 
     fun getSongByTitle(title: String): Song? {
         return songs.value.find { it.title == title }

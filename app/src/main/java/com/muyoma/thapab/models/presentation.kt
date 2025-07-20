@@ -8,4 +8,4 @@ import kotlinx.parcelize.Parcelize
 @Parcelize
 data class Song(val id: Long, val title: String, val artist: String, val coverResId: Int = R.drawable.bg,
                 val data: String ) : Parcelable
-data class Playlist(val id: Long,val title : String, val songs : Int, val duration : Double,val thumbnail : Int )
+data class Playlist(val id: Long,val title : String, val songs : Int,val thumbnail : Int )

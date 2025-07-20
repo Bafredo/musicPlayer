@@ -9,8 +9,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -20,14 +22,25 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -55,6 +68,90 @@ fun SectionHeader(title: String ,modifier: Modifier = Modifier) {
 }
 
 @Composable
+fun PlayListSectionHeader(title: String ,add : ()->Unit,modifier: Modifier = Modifier) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+        modifier = Modifier
+            .fillMaxWidth()
+    ){
+        Text(
+            text = title,
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.ExtraBold,
+            color = Color.Gray,
+            modifier = modifier.padding(bottom = 8.dp)
+        )
+        IconButton(
+            onClick = {
+                add()
+            }
+        ) {
+            Icon(
+                imageVector = Icons.Default.Add,
+                null
+            )
+        }
+    }
+}
+@Composable
+fun PlayListDialog(
+    title: String,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit
+) {
+    var playlistName by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(20.dp),
+        containerColor = Color.Black,
+        tonalElevation = 8.dp,
+        title = {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.headlineSmall,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                OutlinedTextField(
+                    value = playlistName,
+                    onValueChange = { playlistName = it },
+                    label = { Text("Playlist name", color = Color.Gray) },
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onConfirm(playlistName) },
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.defaultMinSize(minWidth = 100.dp)
+            ) {
+                Text("Create")
+            }
+        },
+        dismissButton = {
+            OutlinedButton(
+                onClick = onDismiss,
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.defaultMinSize(minWidth = 100.dp)
+            ) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
 fun SongCarousel(songs: List<Song>) {
     LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         items(songs.size) { index ->
@@ -73,10 +170,14 @@ fun AlbumCarousel(songs: List<Song>) {
 }
 
 @Composable
-fun MostPlayedCarousel(songs: List<Song>) {
+fun MostPlayedCarousel(songs: List<Song>, currentSong: Song?, play: (Song) -> Unit) {
     LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         items(songs.size) { index ->
-            MostPlayedCard(song = songs[index])
+            MostPlayedCard(
+                song = songs[index],
+                isPlaying = currentSong == songs[index],
+                play = {play(songs[index])}
+            )
         }
     }
 }
@@ -87,7 +188,7 @@ fun PlayLister(playlists : List<Playlist>){
         columns = GridCells.Fixed(2), // 2 columns
         modifier = Modifier
             .fillMaxWidth()
-            .height(180.dp),
+            .heightIn(80.dp,180.dp),
         contentPadding = PaddingValues(1.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -138,11 +239,10 @@ fun SongCard(song: Song) {
     }
 }
 @Composable
-fun MostPlayedCard(song: Song) {
+fun MostPlayedCard(song: Song, isPlaying: Boolean, play: ()->Unit) {
     Card(
         modifier = Modifier
-            .size(160.dp)
-            .clickable { /* TODO: handle click */ },
+            .size(160.dp),
 //            .shadow(1.dp, RoundedCornerShape(12.dp), true, Color.Cyan),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = Color.Transparent),
@@ -160,6 +260,7 @@ fun MostPlayedCard(song: Song) {
                     .size(160.dp)
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(12.dp))
+                    .clickable { play()}
                 ,
                 contentScale = ContentScale.Crop
             )
@@ -193,7 +294,7 @@ fun MostPlayedCard(song: Song) {
                 }
                 Icon(
                     tint = Color.Black,
-                    imageVector = Icons.Default.PlayArrow,
+                    imageVector = if(isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                     contentDescription = null,
                     modifier = Modifier
                         .padding(4.dp)
@@ -306,11 +407,6 @@ fun PlayListCard(data : Playlist){
                     text = "Songs : ${ data.songs }",
                     fontWeight = FontWeight.ExtraLight,
                     fontSize = 14.sp
-                )
-                Text(
-                    text = "Duration : ${ data.duration } minutes",
-                    fontWeight = FontWeight.ExtraLight,
-                    fontSize = 10.sp
                 )
             }
 
