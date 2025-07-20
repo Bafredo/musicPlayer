@@ -1,30 +1,98 @@
 package com.muyoma.thapab.viewmodel
 
+import android.app.Application
 import android.content.Context
+import android.content.Intent
 import android.os.Build
 import android.provider.MediaStore
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import com.muyoma.thapab.R
+import com.muyoma.thapab.data.DBHandler
 import com.muyoma.thapab.models.Playlist
 import com.muyoma.thapab.models.Song
 import com.muyoma.thapab.service.PlayerController
+import com.muyoma.thapab.service.PlayerService
+import com.muyoma.thapab.ui.composables.PlayLister
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlin.collections.emptyList
 
-class DataViewModel : ViewModel() {
+class DataViewModel(application: Application) : AndroidViewModel(application) {
     var _songs = MutableStateFlow<List<Song>>(emptyList())
     var songs : StateFlow<List<Song>> = _songs.asStateFlow()
-    val _isPlaying = MutableStateFlow(false)
+    val _isPlaying = PlayerController._isPlaying
     val isPlaying: StateFlow<Boolean> = _isPlaying
-    val _currentSong = MutableStateFlow<Song?>(null)
+    val _currentSong = PlayerController._currentSong
     val currentSong: StateFlow<Song?> = _currentSong.asStateFlow()
-    val _showPlayer = MutableStateFlow<Boolean>(false)
+    val _showPlayer = PlayerController._isPlaying
     val showPlayer: StateFlow<Boolean> = _showPlayer.asStateFlow()
+    private val _likedSongs = MutableStateFlow<List<Song>>(emptyList())
+    val likedSongs = _likedSongs.asStateFlow()
+    val context = application.applicationContext
+    val dbHandler = DBHandler(context)
+
+
+    fun refreshLikedSongs() {
+        _likedSongs.value = getLikedSongs()
+    }
+    init {
+        refreshLikedSongs()
+    }
+
+
+
+//    fun initDatabase(context: Context) {
+//        dbHandler = DBHandler(context)
+//    }
+
+    fun likeSong(song: Song) {
+        dbHandler.likeSong(song.id.toString())
+    }
+
+    fun unlikeSong(song: Song) {
+        dbHandler.unlikeSong(song.id.toString())
+    }
+
+    fun isSongLiked(song: Song): Boolean {
+        return dbHandler.isSongLiked(song.id.toString())
+    }
+
+    fun getLikedSongs(): List<Song> {
+        val likedIds = dbHandler.getLikedSongs().toSet()
+        return songs.value.filter { likedIds.contains(it.id.toString()) }
+    }
+    fun createPlaylist(name: String) {
+        dbHandler.createPlaylist(name)
+    }
+
+    fun deletePlaylist(name: String) {
+        dbHandler.deletePlaylist(name)
+    }
+
+    fun getAllPlaylists(): List<String> {
+        return dbHandler.getAllPlaylists()
+    }
+
+    fun addSongToPlaylist(playlistName: String, song: Song) {
+        dbHandler.addSongToPlaylist(playlistName, song.id.toString())
+    }
+
+    fun removeSongFromPlaylist(playlistName: String, song: Song) {
+        dbHandler.removeSongFromPlaylist(playlistName, song.id.toString())
+    }
+
+    fun getSongsFromPlaylist(playlistName: String): List<Song> {
+        val ids = dbHandler.getSongsFromPlaylist(playlistName).toSet()
+        return songs.value.filter { ids.contains(it.id.toString()) }
+    }
+
+
 
 
 
@@ -83,17 +151,32 @@ class DataViewModel : ViewModel() {
 
     fun playSong(context: Context, song: Song) {
         PlayerController.play(context, song)
-        if (_currentSong.value?.id != song.id) {
-            _currentSong.value = song
+
+        // Only update if new song
+        val serviceIntent = Intent(context, PlayerService::class.java).apply {
+            action = PlayerService.ACTION_PLAY
+            putExtra(PlayerService.EXTRA_SONG, song) // ✅ Corrected this line
+            putParcelableArrayListExtra(PlayerService.EXTRA_SONG_LIST, ArrayList(songs.value)) // ✅ Pass full list
         }
+
+        ContextCompat.startForegroundService(context, serviceIntent)
+
         _isPlaying.value = true
         _showPlayer.value = true
-
     }
-    fun pauseSong(){
+
+
+
+    fun pauseSong(context: Context) {
         PlayerController.pause()
         _isPlaying.value = false
+
+        val pauseIntent = Intent(context, PlayerService::class.java).apply {
+            action = PlayerService.ACTION_PAUSE
+        }
+        context.startService(pauseIntent)
     }
+
     fun playNext(context: Context){
         var index = songs.value.indexOf(currentSong.value)
         if (index == (songs.value.size-1)){

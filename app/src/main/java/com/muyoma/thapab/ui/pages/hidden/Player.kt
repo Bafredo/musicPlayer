@@ -3,6 +3,7 @@ package com.muyoma.thapab.ui.pages.hidden
 import android.media.MediaPlayer
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,6 +17,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Headset
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.MoreVert
@@ -29,6 +31,8 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -54,6 +58,11 @@ fun Player(
 
     val context  = LocalContext.current
     val song = dataViewModel.currentSong.collectAsState().value!!
+    val isLiked by remember {
+        mutableStateOf(
+            dataViewModel.likedSongs.value.indexOf(s) >= 0
+        )
+    }
 
 
     Column(
@@ -161,9 +170,17 @@ fun Player(
                 }
 
                 Icon(
-                    imageVector = Icons.Outlined.FavoriteBorder,
+                    imageVector = if(dataViewModel.isSongLiked(s)) Icons.Default.Favorite else Icons.Outlined.FavoriteBorder,
                     contentDescription = "Like Song",
-                    tint = Color.White
+                    tint = Color.White,
+                    modifier = Modifier
+                        .clickable{
+                            if(dataViewModel.isSongLiked(s))
+                                dataViewModel.unlikeSong(s)
+                            else
+                                dataViewModel.likeSong(s)
+                        }
+
                 )
             }
 
@@ -172,7 +189,7 @@ fun Player(
             // Progress Slider
             MusicProgressTracker(
           play = { dataViewModel.playSong(context,song)},
-                pause = { dataViewModel.pauseSong() },
+                pause = { dataViewModel.pauseSong(context) },
                 duration = dataViewModel.getDuration(),
                 next = {dataViewModel.playNext(context)},
                 prev = {dataViewModel.playPrev(context)}

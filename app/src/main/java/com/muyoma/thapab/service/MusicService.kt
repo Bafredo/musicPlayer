@@ -18,71 +18,64 @@ import com.muyoma.thapab.R
 import com.muyoma.thapab.models.Song
 import androidx.core.net.toUri
 import com.muyoma.thapab.MainActivity
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 object PlayerController {
     var mediaPlayer: MediaPlayer? = null
+    var _currentSong: MutableStateFlow<Song?> = MutableStateFlow(null)
+    var _isPlaying : MutableStateFlow<Boolean> = MutableStateFlow(false)
+    val currentSong : StateFlow<Song?> = _currentSong.asStateFlow()
+
+    private var lastPosition: Int = 0
+
+
 
     fun play(context: Context, song: Song) {
-        stop()
-        mediaPlayer = MediaPlayer.create(context, song.data.toUri()).apply {
-            start()
+        if (mediaPlayer == null || currentSong.value?.data != song.data) {
+            stop() // only stop when a different song is selected
+            mediaPlayer = MediaPlayer.create(context, song.data.toUri()).apply {
+                start()
+            }
+            _currentSong.value = song
+            _isPlaying.value = true
+            lastPosition = 0
+        } else {
+            // Resume the existing song from where it was paused
+            mediaPlayer?.seekTo(lastPosition)
+            mediaPlayer?.start()
+            _isPlaying.value = true
         }
     }
 
     fun pause() {
-        mediaPlayer?.pause()
+        mediaPlayer?.let {
+            if (it.isPlaying) {
+                lastPosition = it.currentPosition
+                it.pause()
+                _isPlaying.value = false
+            }
+        }
     }
+
     fun resume() {
-        mediaPlayer?.start()
+        mediaPlayer?.let {
+            it.seekTo(lastPosition)
+            it.start()
+            _isPlaying.value = true
+        }
     }
 
     fun stop() {
         mediaPlayer?.release()
         mediaPlayer = null
+        lastPosition = 0
+        _currentSong.value = null
+        _isPlaying.value = false
     }
 
     fun isPlaying(): Boolean = mediaPlayer?.isPlaying == true
 
-    fun getCurrentPosition() : Float? = mediaPlayer?.currentPosition?.toFloat()
+    fun getCurrentPosition(): Float? = mediaPlayer?.currentPosition?.toFloat()
 }
-//class MusicService : Service() {
-//
-//
-//    private lateinit var mediaPlayer : MediaPlayer
-//    private lateinit var mediaSession: MediaSession
-//    private lateinit var audioManager: AudioManager
-//    private lateinit var audioFocusRequest: AudioFocusRequest
-//
-//
-//    override fun onCreate() {
-//        super.onCreate()
-//        mediaSession =
-//    }
-//
-//
-//    @RequiresApi(Build.VERSION_CODES.O)
-//    private fun playMedia(){
-//        val result = audioManager.requestAudioFocus(audioFocusRequest)
-//        if(result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED){
-//            mediaPlayer.start()
-//        }
-//    }
-//    private fun createNotification() : Notification{
-//        val intent = Intent(this, MainActivity::class.java)
-//        val pendingIntent = PendingIntent.getActivity(this,0,intent, PendingIntent.FLAG_IMMUTABLE)
-//
-//        return NotificationCompat.Builder(this,"MUSIC_CHANNEL")
-//            .setContentTitle("Now Playing")
-//            .setContentText("Title")
-//            .setSmallIcon(R.drawable.bg4)
-//            .setContentIntent(pendingIntent)
-//            .setStyle(Notification.MediaStyle().setMediaSession(mediaSession.sessionToken) as NotificationCompat.Style?)
-//            .addAction(R.drawable.bg,"Prev",null)
-//            .addAction(R.drawable.bg,"Pause",null)
-//            .addAction(R.drawable.bg,"Next",null)
-//            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-//            .build()
-//    }
-//    override fun onBind(intent: Intent?) : IBinder? = null
-//}
-

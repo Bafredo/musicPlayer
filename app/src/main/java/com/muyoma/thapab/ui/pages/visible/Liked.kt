@@ -57,13 +57,13 @@ import com.muyoma.thapab.viewmodel.DataViewModel
 @Composable
 fun Liked(dataViewModel: DataViewModel,navController: NavController) {
     var displayImage by remember { mutableIntStateOf(0) }
-    val songs = dataViewModel.songs.collectAsState().value
+    val songs = dataViewModel.getLikedSongs()
     val nowPlaying = dataViewModel.currentSong.collectAsState()
     val isPlaying = dataViewModel.isPlaying.collectAsState()
     val context= LocalContext.current
     fun toggleMedia(){
         if (isPlaying.value){
-            dataViewModel.pauseSong()
+            dataViewModel.pauseSong(context)
         }else  {
             nowPlaying.value?.let { dataViewModel.playSong(context,it) }
         }
