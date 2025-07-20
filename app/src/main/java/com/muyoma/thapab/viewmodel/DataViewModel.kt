@@ -24,26 +24,41 @@ import kotlin.collections.emptyList
 class DataViewModel(application: Application) : AndroidViewModel(application) {
     var _songs = MutableStateFlow<List<Song>>(emptyList())
     var songs : StateFlow<List<Song>> = _songs.asStateFlow()
-    val _isPlaying = PlayerController._isPlaying
-    val isPlaying: StateFlow<Boolean> = _isPlaying
+
     val _currentSong = PlayerController._currentSong
     val currentSong: StateFlow<Song?> = _currentSong.asStateFlow()
-    val _showPlayer = PlayerController._isPlaying
+    val _isPlaying = MutableStateFlow<Boolean>(currentSong.value != null)
+    val isPlaying: StateFlow<Boolean> = _isPlaying.asStateFlow()
+    val _currentSongLiked = MutableStateFlow<Boolean>(false)
+    val currentSongLiked = _currentSongLiked.asStateFlow()
+    val _showPlayer = MutableStateFlow<Boolean>(false)
     val showPlayer: StateFlow<Boolean> = _showPlayer.asStateFlow()
     var _playLists = MutableStateFlow<List<Playlist>>(emptyList())
     var playlists = _playLists.asStateFlow()
+
+    var _showPlayListSheet = MutableStateFlow<Boolean>(false)
+    val showPlayListSheet = _showPlayListSheet.asStateFlow()
     private val _likedSongs = MutableStateFlow<List<Song>>(emptyList())
     val likedSongs = _likedSongs.asStateFlow()
     val context = application.applicationContext
     val dbHandler = DBHandler(context)
+     var _selectedSong = MutableStateFlow<Song?>(null)
+    val selectedSong : StateFlow<Song?> = _selectedSong.asStateFlow()
+
+    val _repeatSong = MutableStateFlow<Song?>(null)
+    val repeatSong = _repeatSong.asStateFlow()
+
+
+    fun togglePlaylistSheet(show: Boolean) {
+        _showPlayListSheet.value = show
+    }
 
 
     fun refreshLikedSongs() {
         _likedSongs.value = getLikedSongs()
     }
     init {
-        refreshLikedSongs()
-        loadPlaylistsFromDB()
+
     }
 
 
@@ -54,14 +69,16 @@ class DataViewModel(application: Application) : AndroidViewModel(application) {
 
     fun likeSong(song: Song) {
         dbHandler.likeSong(song.id.toString())
+        _currentSongLiked.value = true
     }
 
     fun unlikeSong(song: Song) {
         dbHandler.unlikeSong(song.id.toString())
+        _currentSongLiked.value = false
     }
 
-    fun isSongLiked(song: Song): Boolean {
-        return dbHandler.isSongLiked(song.id.toString())
+    fun isSongLiked(song: Song?): Boolean {
+        return dbHandler.isSongLiked(song?.id.toString())
     }
 
     fun getLikedSongs(): List<Song> {
@@ -70,7 +87,7 @@ class DataViewModel(application: Application) : AndroidViewModel(application) {
     }
     fun createPlaylist(name: String) {
         dbHandler.createPlaylist(name)
-        loadPlaylistsFromDB()
+        loadPlaylistsFromDB(songs.value)
     }
 
     fun deletePlaylist(name: String) {
@@ -82,7 +99,11 @@ class DataViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun addSongToPlaylist(playlistName: String, song: Song) {
-        dbHandler.addSongToPlaylist(playlistName, song.id.toString())
+        dbHandler.addSongToPlaylist(playlistName, song.data)
+        refreshLikedSongs()
+        loadPlaylistsFromDB(
+            allSongs = songs.value
+        )
     }
 
     fun removeSongFromPlaylist(playlistName: String, song: Song) {
@@ -90,9 +111,19 @@ class DataViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun getSongsFromPlaylist(playlistName: String): List<Song> {
-        val ids = dbHandler.getSongsFromPlaylist(playlistName).toSet()
-        return songs.value.filter { ids.contains(it.id.toString()) }
+        return dbHandler.getSongsFromPlaylist(
+            playlistName,
+            allSongs = songs.value
+        )
     }
+
+    fun repeatSong(s: Song){
+        _repeatSong.value = s
+    }
+    fun undoRepeat(){
+        _repeatSong.value = null
+    }
+
 
 
 
@@ -130,7 +161,9 @@ class DataViewModel(application: Application) : AndroidViewModel(application) {
             val artistCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
             val dataCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATA)
 
+
             while (cursor.moveToNext()) {
+
                 val song = Song(
                     id = cursor.getLong(idCol),
                     title = cursor.getString(titleCol),
@@ -142,12 +175,19 @@ class DataViewModel(application: Application) : AndroidViewModel(application) {
         }
         _songs.value = songList
         _currentSong.value = songList.firstOrNull()
+        _currentSongLiked.value = isSongLiked(currentSong.value)
 
         recommended = songList.take(5)
         mostPopular = songList.takeLast(5)
         mostPlayed = songList.shuffled().take(5)
+        refreshLikedSongs()
+        loadPlaylistsFromDB(
+            allSongs = songs.value
+        )
 
     }
+
+
 
 
 
@@ -163,7 +203,6 @@ class DataViewModel(application: Application) : AndroidViewModel(application) {
 
         ContextCompat.startForegroundService(context, serviceIntent)
 
-        _isPlaying.value = true
         _showPlayer.value = true
     }
 
@@ -183,8 +222,12 @@ class DataViewModel(application: Application) : AndroidViewModel(application) {
         var index = songs.value.indexOf(currentSong.value)
         if (index == (songs.value.size-1)){
             _currentSong.value = songs.value.first()
+            _currentSongLiked.value = isSongLiked(currentSong.value)
+
         } else {
             _currentSong.value = songs.value[++index]
+            _currentSongLiked.value = isSongLiked(currentSong.value)
+
         }
         currentSong.value?.let { it->
             playSong(context,it)
@@ -195,8 +238,12 @@ class DataViewModel(application: Application) : AndroidViewModel(application) {
         var index = songs.value.indexOf(currentSong.value)
         if (index == 0){
             _currentSong.value = songs.value.last()
+            _currentSongLiked.value = isSongLiked(currentSong.value)
+
         } else {
             _currentSong.value = songs.value[--index]
+            _currentSongLiked.value = isSongLiked(currentSong.value)
+
         }
         currentSong.value?.let { it->
             playSong(context,it)
@@ -229,11 +276,13 @@ class DataViewModel(application: Application) : AndroidViewModel(application) {
         private set
 
 
-    fun loadPlaylistsFromDB() {
+    fun loadPlaylistsFromDB(allSongs: List<Song>) {
         val playlists = dbHandler.getAllPlaylists().mapIndexed { index, name ->
-            val songs = getSongsFromPlaylist(name)
+            cleanUpInvalidSongsInPlaylist(name, allSongs)
+            val songs = dbHandler.getSongsFromPlaylist(name, allSongs)
+            println("$name : ${songs.map { it.id }}")
             Playlist(
-                id = index.toLong(), // or use hash(name) or rowid if available
+                id = index.toLong(),
                 title = name,
                 songs = songs.size,
                 thumbnail = pickThumbnailFor(name, index),
@@ -241,6 +290,8 @@ class DataViewModel(application: Application) : AndroidViewModel(application) {
         }
         _playLists.value = playlists
     }
+
+
     private fun pickThumbnailFor(name: String, index: Int): Int {
         val thumbnails = listOf(
             R.drawable.bg, R.drawable.bg2, R.drawable.bg3, R.drawable.bg4
@@ -253,4 +304,17 @@ class DataViewModel(application: Application) : AndroidViewModel(application) {
     fun getSongByTitle(title: String): Song? {
         return songs.value.find { it.title == title }
     }
+    fun cleanUpInvalidSongsInPlaylist(playlistName: String, allSongs: List<Song>) {
+        val validIds = allSongs.map { it.id.toString() }.toSet()
+        val playlistSongIds = dbHandler.getSongsFromPlaylist(playlistName, allSongs = allSongs)
+            .map { it.id.toString() }
+
+        playlistSongIds.forEach { id ->
+            if (!validIds.contains(id)) {
+                dbHandler.removeSongFromPlaylist(playlistName, id)
+                println("Removed stale song ID=$id from playlist=$playlistName")
+            }
+        }
+    }
+
 }

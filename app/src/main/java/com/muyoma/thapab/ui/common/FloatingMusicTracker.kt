@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -42,6 +43,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.rememberAsyncImagePainter
 import com.muyoma.thapab.models.Song
 import com.muyoma.thapab.service.PlayerController
 import kotlinx.coroutines.delay
@@ -49,7 +51,7 @@ import kotlinx.coroutines.launch
 import com.muyoma.thapab.R
 
 @Composable
-fun FloatingMusicTracker(song: Song, pause: () -> Unit, play: () -> Unit) {
+fun FloatingMusicTracker(song: Song,isLiked : Boolean, pause: () -> Unit, play: () -> Unit,liked :(Song)->Unit) {
     var currentPosition by remember { mutableStateOf(0f) }
     var duration by remember { mutableStateOf(1f) } // Default to 1 to avoid 0..0 crash
     val scope = rememberCoroutineScope()
@@ -87,7 +89,8 @@ fun FloatingMusicTracker(song: Song, pause: () -> Unit, play: () -> Unit) {
             modifier = Modifier.weight(8f).fillMaxHeight()
         ) {
             Image(
-                painter = painterResource(song.coverResId),
+                painter = if(song.coverResId != null) rememberAsyncImagePainter(model = song.coverResId)
+                else painterResource(R.drawable.bg),
                 contentDescription = song.title,
                 modifier = Modifier
                     .width(55.dp)
@@ -137,16 +140,18 @@ fun FloatingMusicTracker(song: Song, pause: () -> Unit, play: () -> Unit) {
             modifier = Modifier.weight(3f)
         ) {
             Icon(
-                imageVector = Icons.Default.FavoriteBorder,
+                imageVector =if(isLiked) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                 contentDescription = null,
-                tint = Color.White
+                tint = Color.White,
+                modifier = Modifier
+                    .clickable{
+                        liked(song)
+                    }
             )
             Icon(
                 imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                 contentDescription = if (isPlaying) "Pause" else "Play",
                 modifier = Modifier
-                    .padding(10.dp)
-                    .size(30.dp)
                     .background(Color(0x9E07F6F6), CircleShape)
                     .clip(CircleShape)
                     .clickable {
@@ -157,7 +162,8 @@ fun FloatingMusicTracker(song: Song, pause: () -> Unit, play: () -> Unit) {
                         }
                     }
                     .padding(10.dp),
-                tint = Color.White
+                tint = Color.White,
+
             )
         }
     }

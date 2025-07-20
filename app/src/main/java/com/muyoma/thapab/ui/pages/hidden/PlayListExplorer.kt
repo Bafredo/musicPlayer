@@ -1,7 +1,6 @@
-package com.muyoma.thapab.ui.pages.visible
+package com.muyoma.thapab.ui.pages.hidden
 
 import android.annotation.SuppressLint
-import android.content.Context
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -13,9 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Shuffle
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
-import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -26,9 +23,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.muyoma.thapab.R
 import com.muyoma.thapab.models.Song
@@ -38,9 +33,8 @@ import com.muyoma.thapab.viewmodel.DataViewModel
 
 @SuppressLint("ConfigurationScreenWidthHeight")
 @Composable
-fun Liked(dataViewModel: DataViewModel, navController: NavController) {
+fun PlayListExplorer(dataViewModel: DataViewModel, navController: NavController, songs: List<Song>) {
     val displayImage = remember { mutableIntStateOf(0) }
-    val songs = dataViewModel.getLikedSongs()
     val nowPlaying = dataViewModel.currentSong.collectAsState()
     val isPlaying = dataViewModel.isPlaying.collectAsState()
     val context = LocalContext.current

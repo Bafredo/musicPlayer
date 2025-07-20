@@ -12,7 +12,9 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -30,7 +32,10 @@ import com.muyoma.thapab.models.Song
 import com.muyoma.thapab.service.PlayerController
 import com.muyoma.thapab.service.PlayerService
 import com.muyoma.thapab.ui.common.*
+import com.muyoma.thapab.ui.composables.PlayListDialog
+import com.muyoma.thapab.ui.composables.PlaylistBottomSheet
 import com.muyoma.thapab.ui.pages.auth.Auth
+import com.muyoma.thapab.ui.pages.hidden.PlayListExplorer
 import com.muyoma.thapab.ui.pages.hidden.Player
 import com.muyoma.thapab.ui.pages.visible.*
 import com.muyoma.thapab.ui.theme.AppTheme
@@ -46,6 +51,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var dataViewModel: DataViewModel
     private lateinit var playerStateReceiver: BroadcastReceiver
 
+    @OptIn(ExperimentalMaterial3Api::class)
     @RequiresApi(Build.VERSION_CODES.S)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -61,9 +67,12 @@ class MainActivity : ComponentActivity() {
                 val backStackEntry by navController.currentBackStackEntryAsState()
                 val currentRoute = backStackEntry?.destination?.route
                 var showBars by remember { mutableStateOf(false) }
+                var showCreatePlaylist by remember { mutableStateOf(false) }
 
                 val _isPlaying = MutableStateFlow(false)
                 val isPlaying: StateFlow<Boolean> = _isPlaying.asStateFlow()
+
+                val liked by dataViewModel.currentSongLiked.collectAsState()
 
                 val systemUiController = rememberSystemUiController()
                 SideEffect {
@@ -126,6 +135,15 @@ class MainActivity : ComponentActivity() {
                                 composable("liked") { Liked(dataViewModel, navController) }
                                 composable("local") { Local(dataViewModel, navController) }
                                 composable("search") { Search(dataViewModel) }
+                                composable("playlist/{$PLAYER_ARG_SONG_ID}",
+                                    arguments = listOf(navArgument(PLAYER_ARG_SONG_ID) { type = NavType.StringType })
+                                ) { entry ->
+                                    val listName = entry.arguments?.getString(PLAYER_ARG_SONG_ID)
+                                    val list = listName?.let { dataViewModel.getSongsFromPlaylist(it) }
+                                    list?.let {
+                                        PlayListExplorer(dataViewModel, navController,it)
+                                    }
+                                }
                                 composable(
                                     "player/{$PLAYER_ARG_SONG_ID}",
                                     arguments = listOf(navArgument(PLAYER_ARG_SONG_ID) { type = NavType.StringType })
@@ -154,18 +172,30 @@ class MainActivity : ComponentActivity() {
                                             PlayerController.currentSong.collectAsState().value!!
                                         }
 
-                                        FloatingMusicTracker(
-                                            song = song,
-                                            pause = { dataViewModel.pauseSong(context) },
-                                            play = { dataViewModel.unpauseSong() }
-                                        )
+                                            FloatingMusicTracker(
+                                                song = song,
+                                                isLiked = liked,
+                                                pause = { dataViewModel.pauseSong(context) },
+                                                play = { dataViewModel.unpauseSong() },
+                                                liked = {
+                                                    if (dataViewModel.isSongLiked(it))
+                                                        dataViewModel.unlikeSong(it)
+                                                    else
+                                                        dataViewModel.likeSong(it)
+                                                }
+                                            )
+
                                     }
 
                                     BottomNavigationBar(
                                         modifier = Modifier
                                             .background(
                                                 brush = Brush.verticalGradient(
-                                                    colors = listOf(Color.Black, Color.Black, Color.Transparent),
+                                                    colors = listOf(
+                                                        Color.Black,
+                                                        Color.Black,
+                                                        Color.Transparent
+                                                    ),
                                                     startY = Float.POSITIVE_INFINITY,
                                                     endY = 0f
                                                 )
@@ -174,6 +204,45 @@ class MainActivity : ComponentActivity() {
                                         navController = navController
                                     )
                                 }
+                            }
+                        }
+                        if (dataViewModel.showPlayListSheet.collectAsState().value) {
+                            ModalBottomSheet(
+                                onDismissRequest = { dataViewModel.togglePlaylistSheet(false) },
+                                containerColor = Color(0XBF000000)
+                            ) {
+                                PlaylistBottomSheet(
+                                    playlists = dataViewModel.playlists.collectAsState().value,
+                                    onAddPlaylist = {
+                                        dataViewModel.togglePlaylistSheet(false)
+                                        showCreatePlaylist = true
+                                    },
+                                    onDismiss = { dataViewModel.togglePlaylistSheet(false) },
+                                    onSelect = {
+                                        val song = dataViewModel.selectedSong.value
+                                        if(song != null) {
+                                            dataViewModel.addSongToPlaylist(it, song)
+                                            dataViewModel._showPlayListSheet.value = false
+                                        }
+                                    },
+                                )
+                            }
+
+                        }
+                        if(showCreatePlaylist){
+                            PlayListDialog(
+                                "Create Playlist",
+                                onDismiss = {showCreatePlaylist = false}
+                            ) { name ->
+                                if(dataViewModel.selectedSong.value != null){
+                                    dataViewModel.createPlaylist(name)
+                                    dataViewModel.addSongToPlaylist(
+                                        name,
+                                        dataViewModel.selectedSong.value!!
+                                    )
+                                }
+                                showCreatePlaylist = false
+                                dataViewModel._showPlayListSheet.value = false
                             }
                         }
                     }

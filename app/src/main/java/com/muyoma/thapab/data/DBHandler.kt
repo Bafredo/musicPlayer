@@ -4,22 +4,21 @@ import android.content.ContentValues
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
+import com.muyoma.thapab.models.Song
 
 class DBHandler(context: Context) : SQLiteOpenHelper(
     context, DATABASE_NAME, null, DATABASE_VERSION
 ) {
     companion object {
         private const val DATABASE_NAME = "MusicDB"
-        private const val DATABASE_VERSION = 1
+        private const val DATABASE_VERSION = 2
 
-        // Tables
         private const val TABLE_LIKED_SONGS = "LikedSongs"
         private const val TABLE_PLAYLISTS = "Playlists"
         private const val TABLE_PLAYLIST_SONGS = "PlaylistSongs"
 
-        // Columns
         private const val KEY_ID = "id"
-        private const val KEY_SONG_ID = "songId"
+        private const val KEY_SONG_URI = "songUri"
         private const val KEY_PLAYLIST_NAME = "name"
         private const val KEY_PLAYLIST_ID = "playlistId"
     }
@@ -28,7 +27,7 @@ class DBHandler(context: Context) : SQLiteOpenHelper(
         val createLikedSongs = """
             CREATE TABLE $TABLE_LIKED_SONGS (
                 $KEY_ID INTEGER PRIMARY KEY AUTOINCREMENT,
-                $KEY_SONG_ID TEXT UNIQUE
+                $KEY_SONG_URI TEXT UNIQUE
             );
         """.trimIndent()
 
@@ -43,7 +42,7 @@ class DBHandler(context: Context) : SQLiteOpenHelper(
             CREATE TABLE $TABLE_PLAYLIST_SONGS (
                 $KEY_ID INTEGER PRIMARY KEY AUTOINCREMENT,
                 $KEY_PLAYLIST_ID INTEGER,
-                $KEY_SONG_ID TEXT,
+                $KEY_SONG_URI TEXT,
                 FOREIGN KEY($KEY_PLAYLIST_ID) REFERENCES $TABLE_PLAYLISTS($KEY_ID)
             );
         """.trimIndent()
@@ -61,24 +60,24 @@ class DBHandler(context: Context) : SQLiteOpenHelper(
     }
 
     // --- Liked Songs ---
-    fun likeSong(songId: String) {
+    fun likeSong(songUri: String) {
         val db = writableDatabase
         val values = ContentValues().apply {
-            put(KEY_SONG_ID, songId)
+            put(KEY_SONG_URI, songUri)
         }
         db.insertWithOnConflict(TABLE_LIKED_SONGS, null, values, SQLiteDatabase.CONFLICT_IGNORE)
         db.close()
     }
 
-    fun unlikeSong(songId: String) {
+    fun unlikeSong(songUri: String) {
         val db = writableDatabase
-        db.delete(TABLE_LIKED_SONGS, "$KEY_SONG_ID=?", arrayOf(songId))
+        db.delete(TABLE_LIKED_SONGS, "$KEY_SONG_URI=?", arrayOf(songUri))
         db.close()
     }
 
     fun getLikedSongs(): List<String> {
         val db = readableDatabase
-        val cursor = db.rawQuery("SELECT $KEY_SONG_ID FROM $TABLE_LIKED_SONGS", null)
+        val cursor = db.rawQuery("SELECT $KEY_SONG_URI FROM $TABLE_LIKED_SONGS", null)
         val songs = mutableListOf<String>()
         if (cursor.moveToFirst()) {
             do {
@@ -90,11 +89,11 @@ class DBHandler(context: Context) : SQLiteOpenHelper(
         return songs
     }
 
-    fun isSongLiked(songId: String): Boolean {
+    fun isSongLiked(songUri: String): Boolean {
         val db = readableDatabase
         val cursor = db.rawQuery(
-            "SELECT 1 FROM $TABLE_LIKED_SONGS WHERE $KEY_SONG_ID=?",
-            arrayOf(songId)
+            "SELECT 1 FROM $TABLE_LIKED_SONGS WHERE $KEY_SONG_URI=?",
+            arrayOf(songUri)
         )
         val exists = cursor.moveToFirst()
         cursor.close()
@@ -124,6 +123,7 @@ class DBHandler(context: Context) : SQLiteOpenHelper(
         idCursor.close()
         db.close()
     }
+
     fun renamePlaylist(oldName: String, newName: String): Boolean {
         val db = writableDatabase
         val values = ContentValues().apply {
@@ -133,7 +133,6 @@ class DBHandler(context: Context) : SQLiteOpenHelper(
         db.close()
         return rows > 0
     }
-
 
     fun getAllPlaylists(): List<String> {
         val db = readableDatabase
@@ -150,55 +149,85 @@ class DBHandler(context: Context) : SQLiteOpenHelper(
     }
 
     // --- Playlist Songs ---
-    fun addSongToPlaylist(playlistName: String, songId: String) {
+    fun addSongToPlaylist(playlistName: String, songUri: String) {
         val db = writableDatabase
-        val cursor = db.rawQuery("SELECT $KEY_ID FROM $TABLE_PLAYLISTS WHERE $KEY_PLAYLIST_NAME=?", arrayOf(playlistName))
+        val cursor = db.rawQuery(
+            "SELECT $KEY_ID FROM $TABLE_PLAYLISTS WHERE $KEY_PLAYLIST_NAME=?",
+            arrayOf(playlistName)
+        )
+
         if (cursor.moveToFirst()) {
             val playlistId = cursor.getInt(0)
-            val values = ContentValues().apply {
-                put(KEY_PLAYLIST_ID, playlistId)
-                put(KEY_SONG_ID, songId)
+
+            val checkCursor = db.rawQuery(
+                "SELECT 1 FROM $TABLE_PLAYLIST_SONGS WHERE $KEY_PLAYLIST_ID=? AND $KEY_SONG_URI=?",
+                arrayOf(playlistId.toString(), songUri)
+            )
+
+            if (!checkCursor.moveToFirst()) {
+                val values = ContentValues().apply {
+                    put(KEY_PLAYLIST_ID, playlistId)
+                    put(KEY_SONG_URI, songUri)
+                }
+                db.insert(TABLE_PLAYLIST_SONGS, null, values)
             }
-            db.insert(TABLE_PLAYLIST_SONGS, null, values)
+
+            checkCursor.close()
         }
+
         cursor.close()
         db.close()
     }
 
-    fun removeSongFromPlaylist(playlistName: String, songId: String) {
+    fun removeSongFromPlaylist(playlistName: String, songUri: String) {
         val db = writableDatabase
         val cursor = db.rawQuery("SELECT $KEY_ID FROM $TABLE_PLAYLISTS WHERE $KEY_PLAYLIST_NAME=?", arrayOf(playlistName))
         if (cursor.moveToFirst()) {
             val playlistId = cursor.getInt(0)
             db.delete(
                 TABLE_PLAYLIST_SONGS,
-                "$KEY_PLAYLIST_ID=? AND $KEY_SONG_ID=?",
-                arrayOf(playlistId.toString(), songId)
+                "$KEY_PLAYLIST_ID=? AND $KEY_SONG_URI=?",
+                arrayOf(playlistId.toString(), songUri)
             )
         }
         cursor.close()
         db.close()
     }
 
-    fun getSongsFromPlaylist(playlistName: String): List<String> {
+    fun getSongsFromPlaylist(playlistName: String, allSongs: List<Song>): List<Song> {
         val db = readableDatabase
-        val songs = mutableListOf<String>()
-        val cursor = db.rawQuery("SELECT $KEY_ID FROM $TABLE_PLAYLISTS WHERE $KEY_PLAYLIST_NAME=?", arrayOf(playlistName))
+        val matchedSongs = mutableListOf<Song>()
+
+        val cursor = db.rawQuery(
+            "SELECT $KEY_ID FROM $TABLE_PLAYLISTS WHERE $KEY_PLAYLIST_NAME=?",
+            arrayOf(playlistName.trim())
+        )
+
         if (cursor.moveToFirst()) {
             val playlistId = cursor.getInt(0)
+
             val songCursor = db.rawQuery(
-                "SELECT $KEY_SONG_ID FROM $TABLE_PLAYLIST_SONGS WHERE $KEY_PLAYLIST_ID=?",
+                "SELECT $KEY_SONG_URI FROM $TABLE_PLAYLIST_SONGS WHERE $KEY_PLAYLIST_ID=?",
                 arrayOf(playlistId.toString())
             )
+
             if (songCursor.moveToFirst()) {
                 do {
-                    songs.add(songCursor.getString(0))
+                    val uriString = songCursor.getString(0)
+                    val matched = allSongs.find { it.data.toString() == uriString }
+                    if (matched != null) {
+                        matchedSongs.add(matched)
+                    } else {
+                        println("⚠ URI $uriString not found in allSongs")
+                    }
                 } while (songCursor.moveToNext())
             }
+
             songCursor.close()
         }
+
         cursor.close()
         db.close()
-        return songs
+        return matchedSongs
     }
 }

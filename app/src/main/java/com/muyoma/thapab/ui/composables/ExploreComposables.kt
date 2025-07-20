@@ -1,5 +1,6 @@
 package com.muyoma.thapab.ui.composables
 
+import androidx.compose.animation.core.exponentialDecay
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -37,6 +38,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -52,8 +54,12 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.rememberAsyncImagePainter
+import com.muyoma.thapab.R
 import com.muyoma.thapab.models.Playlist
 import com.muyoma.thapab.models.Song
+import com.muyoma.thapab.service.PlayerController
+import kotlinx.coroutines.flow.asStateFlow
 
 
 @Composable
@@ -171,19 +177,21 @@ fun AlbumCarousel(songs: List<Song>) {
 
 @Composable
 fun MostPlayedCarousel(songs: List<Song>, currentSong: Song?, play: (Song) -> Unit) {
+
     LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+
         items(songs.size) { index ->
             MostPlayedCard(
                 song = songs[index],
-                isPlaying = currentSong == songs[index],
-                play = {play(songs[index])}
+                isPlaying = currentSong == songs[index] && PlayerController._isPlaying.collectAsState().value,
+                play = {play(songs[index])},
             )
         }
     }
 }
 
 @Composable
-fun PlayLister(playlists : List<Playlist>){
+fun PlayLister(playlists : List<Playlist>,explore : (String)->Unit){
     LazyVerticalGrid(
         columns = GridCells.Fixed(2), // 2 columns
         modifier = Modifier
@@ -194,7 +202,9 @@ fun PlayLister(playlists : List<Playlist>){
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         items(playlists.size) { item ->
-            PlayListCard(playlists[item])
+            PlayListCard(playlists[item]){
+                explore(it)
+            }
         }
     }
 }
@@ -214,7 +224,8 @@ fun SongCard(song: Song) {
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Image(
-                painter = painterResource(id = song.coverResId),
+                painter = if(song.coverResId != null)rememberAsyncImagePainter(model = song.coverResId)
+                else painterResource(R.drawable.bg),
                 contentDescription = song.title,
                 modifier = Modifier
                     .height(140.dp)
@@ -254,7 +265,8 @@ fun MostPlayedCard(song: Song, isPlaying: Boolean, play: ()->Unit) {
             ,
         ) {
             Image(
-                painter = painterResource(id = song.coverResId),
+                painter = if(song.coverResId != null)rememberAsyncImagePainter(model = song.coverResId)
+                else painterResource(R.drawable.bg),
                 contentDescription = song.title,
                 modifier = Modifier
                     .size(160.dp)
@@ -294,7 +306,7 @@ fun MostPlayedCard(song: Song, isPlaying: Boolean, play: ()->Unit) {
                 }
                 Icon(
                     tint = Color.Black,
-                    imageVector = if(isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                    imageVector = if(isPlaying ) Icons.Default.Pause else Icons.Default.PlayArrow,
                     contentDescription = null,
                     modifier = Modifier
                         .padding(4.dp)
@@ -319,7 +331,8 @@ fun AlbumCard(song: Song) {
 
         ) {
             Image(
-                painter = painterResource(id = song.coverResId),
+                painter = if(song.coverResId != null)rememberAsyncImagePainter(model = song.coverResId)
+                else painterResource(R.drawable.bg),
                 contentDescription = song.title,
                 modifier = Modifier
                     .height(100.dp)
@@ -362,7 +375,7 @@ fun AlbumCard(song: Song) {
 }
 
 @Composable
-fun PlayListCard(data : Playlist){
+fun PlayListCard(data : Playlist,explore : (String)->Unit){
     Card(
         modifier = Modifier
             .width(160.dp)
@@ -375,7 +388,9 @@ fun PlayListCard(data : Playlist){
                     )
                 )
             )
-            .clickable { /* TODO: handle click */ },
+            .clickable {
+                explore(data.title)
+            },
         shape = RoundedCornerShape(6.dp),
         elevation = CardDefaults.cardElevation(6.dp)
     ) {

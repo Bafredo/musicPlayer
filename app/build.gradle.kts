@@ -69,5 +69,7 @@ dependencies {
     implementation(libs.androidx.media)
 // NotificationCompat (already part of core-ktx and androidx)
     implementation("androidx.core:core:1.16.0")
+    implementation("io.coil-kt:coil-compose:2.7.0")
+
 
 }

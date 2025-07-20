@@ -56,14 +56,16 @@ fun Explore(dataViewModel: DataViewModel,navController: NavController) {
             }
             item {
                 PlayListSectionHeader("Your Playlists",{showCreatePlaylist = true})
-                if(playLists.isNotEmpty()){ PlayLister(playLists) }
+                if(playLists.isNotEmpty()){ PlayLister(playLists){
+                    navController.navigate("playlist/${it}")}
+                }
             }
             item {
                 SectionHeader("Most Played")
                 MostPlayedCarousel(
                     mostPlayed,
                     currentSong = dataViewModel.currentSong.collectAsState().value,
-                    play = {dataViewModel.playSong(context,it)}
+                    play = {dataViewModel.playSong(context,it)},
                 )
             }
 

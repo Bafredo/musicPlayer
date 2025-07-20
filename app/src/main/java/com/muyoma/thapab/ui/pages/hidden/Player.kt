@@ -1,11 +1,9 @@
 package com.muyoma.thapab.ui.pages.hidden
 
-import android.media.MediaPlayer
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -23,11 +21,9 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.outlined.Add
-import androidx.compose.material.icons.outlined.Favorite
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -45,6 +41,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.rememberAsyncImagePainter
 import com.muyoma.thapab.R
 import com.muyoma.thapab.models.Song
 import com.muyoma.thapab.ui.common.MusicProgressTracker
@@ -111,7 +108,8 @@ fun Player(
             elevation = androidx.compose.material3.CardDefaults.cardElevation(10.dp)
         ) {
             Image(
-                painter = painterResource(song.coverResId),
+                painter = if(song.coverResId != null)rememberAsyncImagePainter(model = song.coverResId)
+                else painterResource(R.drawable.bg),
                 contentDescription = "Album Art",
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()
@@ -170,7 +168,7 @@ fun Player(
                 }
 
                 Icon(
-                    imageVector = if(dataViewModel.isSongLiked(s)) Icons.Default.Favorite else Icons.Outlined.FavoriteBorder,
+                    imageVector = if(dataViewModel.currentSongLiked.collectAsState().value) Icons.Default.Favorite else Icons.Outlined.FavoriteBorder,
                     contentDescription = "Like Song",
                     tint = Color.White,
                     modifier = Modifier
