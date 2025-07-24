@@ -87,9 +87,9 @@ fun PlayListExplorer(dataViewModel: DataViewModel, navController: NavController,
                         }
                     ) { it ->
                         if (nowPlaying.value?.title != song.title) {
-                            dataViewModel.playSong(context, song)
+                            dataViewModel.playSong(context, song,songs)
                         } else if (!isPlaying.value) {
-                            dataViewModel.playSong(context, song)
+                            dataViewModel.playSong(context, song,songs)
                         }
                         navController.navigate("player/${song.title}")
                     }

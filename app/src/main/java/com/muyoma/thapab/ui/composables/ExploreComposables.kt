@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -24,13 +25,17 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Speaker
+import androidx.compose.material.icons.outlined.AddCircleOutline
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -52,6 +57,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.rememberAsyncImagePainter
@@ -80,6 +86,7 @@ fun PlayListSectionHeader(title: String ,add : ()->Unit,modifier: Modifier = Mod
         horizontalArrangement = Arrangement.SpaceBetween,
         modifier = Modifier
             .fillMaxWidth()
+            .padding(10.dp, 1.dp)
     ){
         Text(
             text = title,
@@ -94,7 +101,7 @@ fun PlayListSectionHeader(title: String ,add : ()->Unit,modifier: Modifier = Mod
             }
         ) {
             Icon(
-                imageVector = Icons.Default.Add,
+                imageVector = Icons.Default.MoreVert,
                 null
             )
         }
@@ -176,12 +183,13 @@ fun AlbumCarousel(songs: List<Song>) {
 }
 
 @Composable
-fun MostPlayedCarousel(songs: List<Song>, currentSong: Song?, play: (Song) -> Unit) {
+fun MostPlayedCarousel(songs: List<Song>, currentSong: Song?, play: (Song,List<Song>) -> Unit) {
 
     LazyRow(
         horizontalArrangement = Arrangement.spacedBy(16.dp),
         modifier = Modifier
-            .padding(3.dp,1.dp)
+            .padding(3.dp,1.dp),
+
     ) {
 
         items(songs.size) { index ->
@@ -189,7 +197,7 @@ fun MostPlayedCarousel(songs: List<Song>, currentSong: Song?, play: (Song) -> Un
                 song = songs[index],
                 isPlaying = currentSong == songs[index] && PlayerController._isPlaying.collectAsState().value,
                 play = {
-                    play(songs[index])
+                    play(songs[index],songs)
                        },
             )
         }
@@ -199,10 +207,11 @@ fun MostPlayedCarousel(songs: List<Song>, currentSong: Song?, play: (Song) -> Un
 @Composable
 fun PlayLister(playlists : List<Playlist>,explore : (String)->Unit){
     LazyVerticalGrid(
-        columns = GridCells.Fixed(2), // 2 columns
+        columns = GridCells.Fixed(3), // 2 columns
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(80.dp,180.dp),
+            .padding(10.dp, 1.dp)
+            .heightIn(115.dp, 180.dp),
         contentPadding = PaddingValues(1.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -222,7 +231,7 @@ fun SongCard(song: Song) {
             .width(160.dp)
             .clickable { /* TODO: handle click */ },
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0x2A243838)),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E)),
         elevation = CardDefaults.cardElevation(6.dp)
     ) {
         Column(
@@ -236,7 +245,7 @@ fun SongCard(song: Song) {
                 modifier = Modifier
                     .height(140.dp)
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(3.dp)),
+                    .clip(RoundedCornerShape(16.dp)),
                 contentScale = ContentScale.Crop
             )
             Spacer(modifier = Modifier.height(12.dp))
@@ -245,7 +254,8 @@ fun SongCard(song: Song) {
                 fontWeight = FontWeight.SemiBold,
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 2
+                maxLines = 1,
+                overflow = TextOverflow.MiddleEllipsis
             )
             Text(
                 text = song.artist,
@@ -259,7 +269,7 @@ fun SongCard(song: Song) {
 fun MostPlayedCard(song: Song, isPlaying: Boolean, play: ()->Unit) {
     Card(
         modifier = Modifier
-            .size(180.dp),
+            .size(150.dp),
 //            .shadow(1.dp, RoundedCornerShape(12.dp), true, Color.Cyan),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = Color.Transparent),
@@ -274,10 +284,10 @@ fun MostPlayedCard(song: Song, isPlaying: Boolean, play: ()->Unit) {
                 painter = rememberAsyncImagePainter(model = song.coverResId),
                 contentDescription = song.title,
                 modifier = Modifier
-                    .size(180.dp)
+                    .size(150.dp)
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(12.dp))
-                    .clickable { play()}
+                    .clickable { play() }
                 ,
                 contentScale = ContentScale.Crop
             )
@@ -381,55 +391,192 @@ fun AlbumCard(song: Song) {
 
 @Composable
 fun PlayListCard(data : Playlist,explore : (String)->Unit){
-    Card(
-        modifier = Modifier
-            .width(160.dp)
-            .background(
-                brush = Brush.linearGradient(
-                    listOf(
-                        Color.Black,
-                        Color.Black,
-                        Color.Transparent
-                    )
-                )
-            )
-            .clickable {
-                explore(data.title)
-            },
-        shape = RoundedCornerShape(6.dp),
-        elevation = CardDefaults.cardElevation(6.dp)
-    ) {
-        Row(
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.Top,
+
+        Column(
+            verticalArrangement = Arrangement.SpaceBetween,
+            horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier
-                .fillMaxWidth()
-                .height(50.dp)
-                .padding(0.dp, 0.dp, 8.dp, 0.dp)
+
+                .clip(RoundedCornerShape(12.dp))
+                .background(Color(0x79000000))
+                .padding(10.dp)
+                .clickable {
+                    explore(data.title)
+                },
         ) {
             Image(
                 painter = painterResource(data.thumbnail),
                 contentDescription = "Thumbnail",
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
-                    .clip(RoundedCornerShape(0.dp))
-                    .width(50.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .width(100.dp)
+                    .aspectRatio(1f)
             )
             Column(
                 verticalArrangement = Arrangement.Top,
-                horizontalAlignment = Alignment.End
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.fillMaxWidth()
             ) {
                 Text(
                     text = data.title,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Medium,
+                    lineHeight = 10.sp,
+                    color = Color.Gray
                 )
-                Text(
-                    text = "Songs : ${ data.songs }",
-                    fontWeight = FontWeight.ExtraLight,
-                    fontSize = 14.sp
-                )
+
             }
 
+        }
+
+}
+
+
+@Composable
+fun MadeForYouHeader(title: String ,message : String,modifier: Modifier = Modifier) {
+
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(12.dp, 1.dp)
+    ) {
+        Image(
+            painter = painterResource(R.drawable.bg2),
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .size(40.dp)
+                .clip(RoundedCornerShape(5.dp))
+        )
+        Spacer(modifier = Modifier.width(10.dp))
+        Column{
+            Text(
+                text = title,
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.ExtraBold,
+                color = Color.Gray,
+                modifier = modifier
+            )
+            Text(
+                text = message,
+                fontWeight = FontWeight.Medium,
+                color = Color.DarkGray,
+                modifier = Modifier
+            )
+        }
+    }
+}
+@Composable
+fun MadeForYouCard(){
+    Column(
+        verticalArrangement = Arrangement.SpaceBetween,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(230.dp)
+            .padding(20.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(Color(0xFF1E1E1E))
+            .padding(14.dp)
+    ) {
+        Row {
+            Image(
+                painter = painterResource(R.drawable.bg4),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .size(100.dp)
+                    .clip(RoundedCornerShape(7.dp))
+            )
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(7.dp, 1.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(8.dp)
+                ){
+
+                    Row(
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        verticalAlignment = Alignment.CenterVertically
+                    ){
+                        Icon(
+                            imageVector = Icons.Default.MusicNote,
+                            contentDescription = null,
+                            modifier = Modifier
+                                .size(14.dp)
+                        )
+                        Text(
+                            "Grind Hard",
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Icon(
+                        imageVector = Icons.Outlined.AddCircleOutline,
+                        contentDescription = null,
+                        tint = Color.Gray
+                    )
+
+                }
+
+                Column (
+                    modifier = Modifier
+                        .padding(8.dp,1.dp)
+                ){
+                    Text(
+                        text = "Songs : 20 ",
+                        color = Color.Gray
+                    )
+                    Text(
+                        text = "J Cole, Imagine ",
+                        color = Color.LightGray
+                    )
+                }
+            }
+
+        }
+        Row(
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(10.dp, 1.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically
+            ){
+                CircularProgressIndicator(
+                    trackColor = Color.DarkGray,
+                    color = Color(0x9E07F6F6),
+                    modifier = Modifier
+                        .size(20.dp)
+                )
+                IconButton(onClick = {}) {
+                    Icon(
+                        Icons.Default.Speaker,
+                        null
+                    )
+                }
+            }
+            IconButton(
+                onClick = {}
+            ) {
+                Icon(
+                    imageVector = Icons.Default.PlayArrow,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .size(65.dp)
+                        .padding(6.dp)
+                        .clip(CircleShape)
+                        .background(Color(0x9E07F6F6))
+
+                )
+            }
         }
     }
 }

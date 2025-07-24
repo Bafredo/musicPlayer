@@ -93,15 +93,15 @@ fun Liked(dataViewModel: DataViewModel, navController: NavController) {
                         }
                     ) { it ->
                         if (nowPlaying.value?.title != song.title) {
-                            dataViewModel.playSong(context, song)
+                            dataViewModel.playSong(context, song,songs)
                         } else if (!isPlaying.value) {
-                            dataViewModel.playSong(context, song)
+                            dataViewModel.playSong(context, song,songs)
                         }
                         navController.navigate("player/${song.title}")
                     }
                 }
                 item {
-                    Spacer(modifier = Modifier.height(70.dp))
+                    Spacer(modifier = Modifier.height(150.dp))
                 }
             }
         }
@@ -176,7 +176,8 @@ fun Liked(dataViewModel: DataViewModel, navController: NavController) {
                 openDialog = openDialog,
                 selectedSong = selectedSong.value!!,
                 dataViewModel = dataViewModel,
-                context = context
+                context = context,
+                inPlayList = false
             )
         }
     }

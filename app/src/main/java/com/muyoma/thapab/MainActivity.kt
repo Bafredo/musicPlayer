@@ -195,7 +195,7 @@ class MainActivity : ComponentActivity() {
                                     val songTitle = entry.arguments?.getString(PLAYER_ARG_SONG_ID)
                                     val song = songTitle?.let { dataViewModel.getSongByTitle(it) }
                                     song?.let {
-                                        Player(s = it, dataViewModel = dataViewModel)
+                                        Player(s = it, dataViewModel = dataViewModel,navController = navController)
                                     }
                                 }
                             }

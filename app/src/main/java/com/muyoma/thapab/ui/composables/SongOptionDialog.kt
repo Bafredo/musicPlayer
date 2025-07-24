@@ -21,7 +21,9 @@ fun SongOptionsDialog(
     openDialog: MutableState<Boolean>,
     selectedSong: Song,
     dataViewModel: DataViewModel,
-    context: android.content.Context
+    context: android.content.Context,
+    selectedPlayList : String? = null,
+    inPlayList : Boolean = true
 ) {
    AlertDialog(
         onDismissRequest = { openDialog.value = false },
@@ -53,6 +55,13 @@ fun SongOptionsDialog(
                     dataViewModel._selectedSong.value = selectedSong
                     openDialog.value = false
                 }
+                if(inPlayList){
+                    OptionButton("Remove from Playlist") {
+                        // TODO: Implement playlist logic
+                        dataViewModel._selectedSong.value = selectedSong
+                        dataViewModel.removeSongFromPlaylist()
+                    }
+                }
                 OptionButton("Add to Favourites") {
                     selectedSong.let {
                         dataViewModel.likeSong(it)
@@ -65,14 +74,14 @@ fun SongOptionsDialog(
                         openDialog.value = false
                     }
                 }
-                OptionButton("⋯ More") {
-                    // TODO: Add more options
-                    openDialog.value = false
-                }
+//                OptionButton("⋯ More") {
+//                    // TODO: Add more options
+//                    openDialog.value = false
+//                }
             }
         },
         confirmButton = {},
-        containerColor = Color(0xFF1A1A1A),
+        containerColor = Color(0xC91D1D1F),
         titleContentColor = Color.White,
         textContentColor = Color.LightGray
     )

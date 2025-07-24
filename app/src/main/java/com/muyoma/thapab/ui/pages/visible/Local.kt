@@ -51,7 +51,8 @@ fun Local(dataViewModel: DataViewModel, navController: NavController) {
             openDialog = openDialog,
             selectedSong = selectedSong.value!!,
             dataViewModel = dataViewModel,
-            context = context
+            context = context,
+            inPlayList = false
         )
 
     }
@@ -79,6 +80,9 @@ fun Local(dataViewModel: DataViewModel, navController: NavController) {
                 }
                 navController.navigate("player/${it.title}")
             }
+        }
+        item {
+            Spacer(modifier = Modifier.height(150.dp))
         }
     }
 }

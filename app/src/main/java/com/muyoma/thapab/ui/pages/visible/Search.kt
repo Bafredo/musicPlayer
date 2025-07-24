@@ -135,6 +135,9 @@ fun Search(dataViewModel: DataViewModel) {
                         dataViewModel.playSong(context,result)
                     }
                 }
+                item {
+                    Spacer(modifier = Modifier.height(132.dp))
+                }
 
                 if (dummyResults.isEmpty()) {
                     item {

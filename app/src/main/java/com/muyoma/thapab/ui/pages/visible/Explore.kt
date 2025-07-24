@@ -18,6 +18,8 @@ import androidx.navigation.NavController
 import com.muyoma.thapab.service.PlayerController
 import com.muyoma.thapab.service.PlayerController.currentSong
 import com.muyoma.thapab.ui.composables.AlbumCarousel
+import com.muyoma.thapab.ui.composables.MadeForYouCard
+import com.muyoma.thapab.ui.composables.MadeForYouHeader
 import com.muyoma.thapab.ui.composables.MostPlayedCarousel
 import com.muyoma.thapab.ui.composables.PlayListDialog
 import com.muyoma.thapab.ui.composables.PlayListSectionHeader
@@ -47,19 +49,25 @@ fun Explore(dataViewModel: DataViewModel,navController: NavController) {
             modifier = Modifier
                 .background(gradientBackground)
                 .fillMaxSize()
-                .padding(1.dp,16.dp),
-            verticalArrangement = Arrangement.spacedBy(32.dp)
+                .padding(1.dp,6.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item {
                 Spacer(
                     modifier = Modifier
-                        .height(20.dp)
+                        .height(40.dp)
                 )
             }
+            item{
+                MadeForYouHeader("For you ","Chillaaaaaax")
+                MadeForYouCard()
+            }
             item {
-                PlayListSectionHeader("Your Playlists",{showCreatePlaylist = true})
-                if(playLists.isNotEmpty()){ PlayLister(playLists){
-                    navController.navigate("playlist/${it}")}
+                PlayListSectionHeader("Playlists",{dataViewModel._showPlayListSheet.value = true})
+                if(playLists.isNotEmpty()){ PlayLister(playLists){ it->
+                    navController.navigate("playlist/${it}")
+                    dataViewModel._selectedPlaylist.value = it
+                    }
                 }
             }
             item {
@@ -68,13 +76,13 @@ fun Explore(dataViewModel: DataViewModel,navController: NavController) {
                 MostPlayedCarousel(
                     mostPlayed,
                     currentSong = dataViewModel.currentSong.collectAsState().value,
-                    play = {
+                    play = {it,list ->
                         if(it == currentSong.value && playing)
                             dataViewModel.pauseSong(context)
                         else if(it == currentSong.value && !playing)
                             dataViewModel.unpauseSong(context)
                         else
-                            dataViewModel.playSong(context,it)
+                            dataViewModel.playSong(context,it,list)
                            },
                 )
             }
@@ -83,16 +91,12 @@ fun Explore(dataViewModel: DataViewModel,navController: NavController) {
                 SectionHeader("Artists")
                 AlbumCarousel(mostPopular)
             }
-
             item {
                 SectionHeader("Must try")
                 SongCarousel(recommended)
             }
             item {
-                Spacer(
-                    modifier = Modifier
-                        .height(30.dp)
-                )
+                Spacer(modifier = Modifier.height(120.dp))
             }
         }
         if(showCreatePlaylist){

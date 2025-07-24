@@ -1,5 +1,6 @@
 package com.muyoma.thapab.ui.pages.hidden
 
+import android.media.MediaPlayer
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Headset
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -40,36 +42,34 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.navigation.NavController
 import coil.compose.rememberAsyncImagePainter
 import com.muyoma.thapab.R
 import com.muyoma.thapab.models.Song
+import com.muyoma.thapab.service.PlayerController
 import com.muyoma.thapab.ui.common.MusicProgressTracker
 import com.muyoma.thapab.viewmodel.DataViewModel
 
 @Composable
 fun Player(
-    s: Song, // This 's' is the song received via navigation (e.g., from notification or song list)
-    dataViewModel: DataViewModel
+    s: Song,
+    dataViewModel: DataViewModel,
+    navController: NavController
 ) {
     val context = LocalContext.current
-
-    // Observe the currently playing song from the ViewModel
-    // This ensures the UI updates if the song changes (e.g., next/previous)
     val currentPlayingSong by dataViewModel.currentSong.collectAsState()
-
-    // Observe the liked status of the currently playing song from the ViewModel
     val isLiked by dataViewModel.currentSongLiked.collectAsState()
-
-    // Use LaunchedEffect to trigger playSong when 's' changes (i.e., when navigated to this player)
-    // This ensures the song starts playing and player UI becomes visible.
     LaunchedEffect(s) {
         dataViewModel.playSong(context, s)
     }
 
-    // Ensure we have a song to display. If currentPlayingSong is null, maybe show a loading indicator or go back.
-    // For now, we'll assume currentPlayingSong will quickly become 's' due to the playSong call above.
-    // You might want to add a check here for null currentPlayingSong to avoid crashes if playSong fails.
-    val displaySong = currentPlayingSong ?: s // Fallback to 's' if currentPlayingSong is not yet updated
+    val displaySong = currentPlayingSong ?: s
+    val onRepeat by dataViewModel.repeatSong.collectAsState()
+    if(onRepeat){
+        PlayerController.mediaPlayer?.setOnCompletionListener(MediaPlayer.OnCompletionListener(){
+            PlayerController.seekTo(0)
+        })
+    }
 
     Column(
         verticalArrangement = Arrangement.SpaceBetween,
@@ -94,18 +94,24 @@ fun Player(
                 imageVector = Icons.Default.KeyboardArrowDown,
                 contentDescription = "Close Player",
                 tint = Color.White,
-                modifier = Modifier.clickable { /* TODO: Implement navigation back or dismiss player */ }
+                modifier = Modifier.clickable {
+                    navController.popBackStack()
+                }
             )
             Text(
                 text = "PLAYING FROM LIBRARY",
                 fontSize = 12.sp,
                 color = Color.Gray
             )
-            Icon(
-                imageVector = Icons.Default.MoreVert,
-                contentDescription = "More Options",
-                tint = Color.White,
-                modifier = Modifier.clickable { /* TODO: Implement more options dialog */ }
+//            Icon(
+//                imageVector = Icons.Default.MoreVert,
+//                contentDescription = "More Options",
+//                tint = Color.White,
+//                modifier = Modifier.clickable { /* TODO: Implement more options dialog */ }
+//            )
+            Spacer(
+                modifier = Modifier
+                    .width(10.dp)
             )
         }
 
@@ -151,12 +157,12 @@ fun Player(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
-                    imageVector = Icons.Default.Repeat,
+                    imageVector = if (!onRepeat) Icons.Default.Repeat else Icons.Default.ArrowForward,
                     contentDescription = "Repeat",
                     tint = Color.White,
                     modifier = Modifier.clickable {
                         // Implement repeat toggle logic here in DataViewModel
-                        // dataViewModel.toggleRepeat() // Example
+                         dataViewModel.toggleRepeat() // Example
                     }
                 )
 
@@ -221,7 +227,9 @@ fun Player(
                     imageVector = Icons.Default.Headset,
                     contentDescription = "Headset",
                     tint = Color.White,
-                    modifier = Modifier.clickable { /* TODO: Implement device selection/output */ }
+                    modifier = Modifier.clickable {
+
+                    }
                 )
                 Icon(
                     imageVector = Icons.Outlined.Add,
@@ -235,3 +243,5 @@ fun Player(
         }
     }
 }
+
+

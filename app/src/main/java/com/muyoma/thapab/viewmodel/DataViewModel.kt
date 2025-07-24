@@ -55,8 +55,16 @@ class DataViewModel(application: Application) : AndroidViewModel(application) {
     var _selectedSong = MutableStateFlow<Song?>(null)
     val selectedSong : StateFlow<Song?> = _selectedSong.asStateFlow()
 
-    val _repeatSong = MutableStateFlow<Song?>(null)
+    var _selectedPlaylist = MutableStateFlow<String?>(null)
+    val selectedPlaylist : StateFlow<String?> = _selectedPlaylist.asStateFlow()
+
+    val _repeatSong = MutableStateFlow<Boolean>(false)
     val repeatSong = _repeatSong.asStateFlow()
+
+    var _currentList = MutableStateFlow<List<Song>>(songs.value)
+    val currentList : StateFlow<List<Song>> = _currentList.asStateFlow()
+
+
 
 
     fun togglePlaylistSheet(show: Boolean) {
@@ -114,6 +122,7 @@ class DataViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch(Dispatchers.IO) {
             dbHandler.likeSong(song.data) // Use song.data (URI) for liked songs based on DB schema
             // No need to set _currentSongLiked.value here, it will be updated by the PlayerController._currentSong observer
+            _currentSongLiked.value = true
             refreshLikedSongs() // Refresh liked songs list in background
         }
     }
@@ -122,6 +131,7 @@ class DataViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch(Dispatchers.IO) {
             dbHandler.unlikeSong(song.data) // Use song.data (URI) for liked songs based on DB schema
             // No need to set _currentSongLiked.value here, it will be updated by the PlayerController._currentSong observer
+            _currentSongLiked.value = false
             refreshLikedSongs() // Refresh liked songs list in background
         }
     }
@@ -166,7 +176,7 @@ class DataViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun removeSongFromPlaylist(playlistName: String, song: Song) {
+    fun removeSongFromPlaylist(playlistName: String = selectedPlaylist.value!!, song: Song = selectedSong.value!!) {
         viewModelScope.launch(Dispatchers.IO) {
             dbHandler.removeSongFromPlaylist(playlistName, song.data) // Use song.data (URI)
             loadPlaylistsFromDB(songs.value) // Reload playlists after modification
@@ -182,10 +192,13 @@ class DataViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun repeatSong(s: Song){
-        _repeatSong.value = s
+        _repeatSong.value = true
     }
     fun undoRepeat(){
-        _repeatSong.value = null
+        _repeatSong.value = false
+    }
+    fun toggleRepeat() {
+            _repeatSong.value = !_repeatSong.value
     }
 
     // This function now runs entirely on Dispatchers.IO due to its call site in init {}
@@ -249,7 +262,7 @@ class DataViewModel(application: Application) : AndroidViewModel(application) {
     }
 
 
-    fun playSong(context: Context, song: Song) {
+    fun playSong(context: Context, song: Song, playlist : List<Song> = songs.value) {
         // Check if the same song is already playing
         if (PlayerController.isPlaying() && PlayerController.playingSong.value?.id == song.id) {
             println("DataViewModel: Song already playing, no need to restart service.")
@@ -263,10 +276,11 @@ class DataViewModel(application: Application) : AndroidViewModel(application) {
         PlayerController.play(context, song)
 
         // Send intent to PlayerService
+        _currentList.value = playlist
         val serviceIntent = Intent(context, PlayerService::class.java).apply {
             action = PlayerService.ACTION_PLAY
             putExtra(PlayerService.EXTRA_SONG, song)
-            putParcelableArrayListExtra(PlayerService.EXTRA_SONG_LIST, ArrayList(songs.value))
+            putParcelableArrayListExtra(PlayerService.EXTRA_SONG_LIST, ArrayList(playlist))
         }
         ContextCompat.startForegroundService(context, serviceIntent)
 
@@ -309,30 +323,30 @@ class DataViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun playNext(context: Context){
-        var index = songs.value.indexOf(currentSong.value)
-        if (index == (songs.value.size-1)){
-            _currentSong.value = songs.value.first()
+        var index = currentList.value.indexOf(currentSong.value)
+        if (index == (currentList.value.size-1)){
+            _currentSong.value = currentList.value.first()
             // Liked status will be updated by the PlayerController._currentSong observer
         } else {
-            _currentSong.value = songs.value[++index]
+            _currentSong.value = currentList.value[++index]
             // Liked status will be updated by the PlayerController._currentSong observer
         }
         currentSong.value?.let { it->
-            playSong(context,it)
+            playSong(context,it,currentList.value)
         }
     }
 
     fun playPrev(context: Context){
-        var index = songs.value.indexOf(currentSong.value)
+        var index = currentList.value.indexOf(currentSong.value)
         if (index == 0){
-            _currentSong.value = songs.value.last()
+            _currentSong.value = currentList.value.last()
             // Liked status will be updated by the PlayerController._currentSong observer
         } else {
-            _currentSong.value = songs.value[--index]
+            _currentSong.value = currentList.value[--index]
             // Liked status will be updated by the PlayerController._currentSong observer
         }
         currentSong.value?.let { it->
-            playSong(context,it)
+            playSong(context,it,currentList.value)
         }
     }
 
