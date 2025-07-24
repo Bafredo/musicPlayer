@@ -51,7 +51,13 @@ import kotlinx.coroutines.launch
 import com.muyoma.thapab.R
 
 @Composable
-fun FloatingMusicTracker(song: Song,isLiked : Boolean, pause: () -> Unit, play: () -> Unit,liked :(Song)->Unit) {
+fun FloatingMusicTracker(
+    song: Song,isLiked : Boolean,
+    pause: () -> Unit,
+    play: () -> Unit,
+    liked :(Song)->Unit,
+    clicked: (Song)->Unit
+) {
     var currentPosition by remember { mutableStateOf(0f) }
     var duration by remember { mutableStateOf(1f) } // Default to 1 to avoid 0..0 crash
     val scope = rememberCoroutineScope()
@@ -78,6 +84,9 @@ fun FloatingMusicTracker(song: Song,isLiked : Boolean, pause: () -> Unit, play: 
             .clip(RoundedCornerShape(22.dp))
             .border(1.dp, Color.DarkGray, RoundedCornerShape(22.dp))
             .background(Color(0xBF000000), RoundedCornerShape(22.dp))
+            .clickable{
+                clicked(song)
+            }
             .padding(5.dp, 10.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically

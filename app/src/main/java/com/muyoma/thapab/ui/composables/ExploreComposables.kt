@@ -259,7 +259,7 @@ fun SongCard(song: Song) {
 fun MostPlayedCard(song: Song, isPlaying: Boolean, play: ()->Unit) {
     Card(
         modifier = Modifier
-            .size(200.dp),
+            .size(180.dp),
 //            .shadow(1.dp, RoundedCornerShape(12.dp), true, Color.Cyan),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = Color.Transparent),
@@ -271,11 +271,10 @@ fun MostPlayedCard(song: Song, isPlaying: Boolean, play: ()->Unit) {
             ,
         ) {
             Image(
-                painter = if(song.coverResId != null)rememberAsyncImagePainter(model = song.coverResId)
-                else painterResource(R.drawable.bg),
+                painter = rememberAsyncImagePainter(model = song.coverResId),
                 contentDescription = song.title,
                 modifier = Modifier
-                    .size(200.dp)
+                    .size(180.dp)
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(12.dp))
                     .clickable { play()}

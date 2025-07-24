@@ -221,7 +221,9 @@ class MainActivity : ComponentActivity() {
                                                         dataViewModel.unlikeSong(it)
                                                     else
                                                         dataViewModel.likeSong(it)
-                                                }
+                                                },
+                                                clicked = {
+                                                    navController.navigate("player/${it.title}")                                                }
                                             )
                                         }
                                     }

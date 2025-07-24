@@ -35,6 +35,7 @@ class DataViewModel(application: Application) : AndroidViewModel(application) {
 
     val _currentSong = PlayerController._currentSong
     val currentSong: StateFlow<Song?> = _currentSong.asStateFlow()
+
     // Initialize _isPlaying based on PlayerController's actual state
     val _isPlaying = MutableStateFlow<Boolean>(PlayerController.isPlaying())
     val isPlaying: StateFlow<Boolean> = _isPlaying.asStateFlow()
