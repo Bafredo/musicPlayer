@@ -29,7 +29,6 @@ import androidx.navigation.compose.*
 import androidx.navigation.navArgument
 import com.google.accompanist.systemuicontroller.rememberSystemUiController
 import com.muyoma.thapab.models.Song
-import com.muyoma.thapab.service.PlayerController
 import com.muyoma.thapab.service.PlayerService
 import com.muyoma.thapab.ui.common.*
 import com.muyoma.thapab.ui.composables.PlayListDialog
@@ -41,15 +40,21 @@ import com.muyoma.thapab.ui.pages.visible.*
 import com.muyoma.thapab.ui.theme.AppTheme
 import com.muyoma.thapab.viewmodel.AuthViewModel
 import com.muyoma.thapab.viewmodel.DataViewModel
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.MutableSharedFlow // IMPORTANT: New import
+import kotlinx.coroutines.flow.asSharedFlow   // IMPORTANT: New import
+import kotlinx.coroutines.launch // Important for coroutine scope within LaunchedEffect
 
 class MainActivity : ComponentActivity() {
 
     private val PLAYER_ARG_SONG_ID = "songId"
     private lateinit var dataViewModel: DataViewModel
     private lateinit var playerStateReceiver: BroadcastReceiver
+
+    // NEW: SharedFlow to expose onNewIntent calls to Composables
+    // extraBufferCapacity = 1 ensures that if an intent comes in before
+    // the collector is ready, it's not immediately dropped.
+    private val _newIntentFlow = MutableSharedFlow<Intent>(extraBufferCapacity = 1)
+    val newIntentFlow = _newIntentFlow.asSharedFlow()
 
     @OptIn(ExperimentalMaterial3Api::class)
     @RequiresApi(Build.VERSION_CODES.S)
@@ -69,10 +74,8 @@ class MainActivity : ComponentActivity() {
                 var showBars by remember { mutableStateOf(false) }
                 var showCreatePlaylist by remember { mutableStateOf(false) }
 
-                val _isPlaying = MutableStateFlow(false)
-                val isPlaying: StateFlow<Boolean> = _isPlaying.asStateFlow()
-
                 val liked by dataViewModel.currentSongLiked.collectAsState()
+                val showPlayer by dataViewModel.showPlayer.collectAsState()
 
                 val systemUiController = rememberSystemUiController()
                 SideEffect {
@@ -105,17 +108,58 @@ class MainActivity : ComponentActivity() {
                 ) { isGranted ->
                     if (isGranted) {
                         dataViewModel.getAllSongs(context)
-                        dataViewModel._currentSong.value = dataViewModel.songs.value.firstOrNull()
+                    } else {
+                        // Handle permission denied: show a message, disable features, etc.
                     }
                 }
 
                 LaunchedEffect(Unit) {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                        permissionLauncher.launch(Manifest.permission.READ_MEDIA_AUDIO)
-                    } else {
-                        permissionLauncher.launch(Manifest.permission.READ_EXTERNAL_STORAGE)
+                    if (dataViewModel.songs.value.isEmpty()) {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            permissionLauncher.launch(Manifest.permission.READ_MEDIA_AUDIO)
+                        } else {
+                            permissionLauncher.launch(Manifest.permission.READ_EXTERNAL_STORAGE)
+                        }
                     }
                 }
+
+                // --- START: Handle Intent from Notification ---
+                val activity = LocalContext.current as MainActivity // Cast to your specific Activity type
+
+                // LaunchedEffect for the initial intent when the Activity is first created
+                LaunchedEffect(activity.intent) {
+                    // Process the initial intent if it's available
+                    activity.intent?.let { intent ->
+                        val songTitleToPlay = intent.getStringExtra("song_title_to_play")
+                        if (songTitleToPlay != null) {
+                            // Clear the extra so it's not processed again on recomposition or activity recreation
+                            intent.removeExtra("song_title_to_play")
+                            navController.navigate("player/$songTitleToPlay") {
+                                popUpTo(navController.graph.startDestinationId) { saveState = true }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        }
+                    }
+                }
+
+                // LaunchedEffect to observe subsequent intents delivered via onNewIntent
+                LaunchedEffect(Unit) {
+                    // Collect from the SharedFlow that receives new intents
+                    activity.newIntentFlow.collect { intent ->
+                        val songTitleToPlay = intent.getStringExtra("song_title_to_play")
+                        if (songTitleToPlay != null) {
+                            // Clear the extra from the new intent
+                            intent.removeExtra("song_title_to_play")
+                            navController.navigate("player/$songTitleToPlay") {
+                                popUpTo(navController.graph.startDestinationId) { saveState = true }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        }
+                    }
+                }
+                // --- END: Handle Intent from Notification ---
 
 
                 Scaffold(
@@ -130,7 +174,7 @@ class MainActivity : ComponentActivity() {
                                 startDestination = "explore",
                                 modifier = Modifier.background(MaterialTheme.colorScheme.background)
                             ) {
-                                composable("auth") { Auth(authViewModel) }
+//                                composable("auth") { Auth(authViewModel) }
                                 composable("explore") { Explore(dataViewModel, navController) }
                                 composable("liked") { Liked(dataViewModel, navController) }
                                 composable("local") { Local(dataViewModel, navController) }
@@ -148,8 +192,8 @@ class MainActivity : ComponentActivity() {
                                     "player/{$PLAYER_ARG_SONG_ID}",
                                     arguments = listOf(navArgument(PLAYER_ARG_SONG_ID) { type = NavType.StringType })
                                 ) { entry ->
-                                    val songId = entry.arguments?.getString(PLAYER_ARG_SONG_ID)
-                                    val song = songId?.let { dataViewModel.getSongByTitle(it) }
+                                    val songTitle = entry.arguments?.getString(PLAYER_ARG_SONG_ID)
+                                    val song = songTitle?.let { dataViewModel.getSongByTitle(it) }
                                     song?.let {
                                         Player(s = it, dataViewModel = dataViewModel)
                                     }
@@ -164,19 +208,14 @@ class MainActivity : ComponentActivity() {
 
                             if (showBars) {
                                 Column(modifier = Modifier.align(Alignment.BottomCenter)) {
-                                    if (dataViewModel.showPlayer.collectAsState().value) {
-
-                                        val song = if(PlayerController.mediaPlayer == null){
-                                            dataViewModel.currentSong.collectAsState().value!!
-                                        }else{
-                                            PlayerController.currentSong.collectAsState().value!!
-                                        }
-
+                                    if (showPlayer) {
+                                        val currentPlayingSong by dataViewModel.currentSong.collectAsState()
+                                        currentPlayingSong?.let { song ->
                                             FloatingMusicTracker(
                                                 song = song,
                                                 isLiked = liked,
                                                 pause = { dataViewModel.pauseSong(context) },
-                                                play = { dataViewModel.unpauseSong() },
+                                                play = { dataViewModel.unpauseSong(context) },
                                                 liked = {
                                                     if (dataViewModel.isSongLiked(it))
                                                         dataViewModel.unlikeSong(it)
@@ -184,7 +223,7 @@ class MainActivity : ComponentActivity() {
                                                         dataViewModel.likeSong(it)
                                                 }
                                             )
-
+                                        }
                                     }
 
                                     BottomNavigationBar(
@@ -250,22 +289,21 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        // Broadcast receiver registered outside of setContent
         playerStateReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context?, intent: Intent?) {
                 when (intent?.action) {
                     PlayerService.BROADCAST_ACTION_PLAY -> {
-                        dataViewModel.unpauseSong()
+                        dataViewModel.unpauseSong(applicationContext)
                     }
                     PlayerService.BROADCAST_ACTION_PAUSE -> {
-                        dataViewModel._isPlaying.value = false
+                        // Handled by direct observation of PlayerController._isPlaying if DataViewModel is set up for it
                     }
                     PlayerService.BROADCAST_ACTION_NEXT,
                     PlayerService.BROADCAST_ACTION_PREV -> {
                         val song = intent.getParcelableExtra<Song>("song")
                         song?.let {
                             dataViewModel._currentSong.value = it
-                            dataViewModel._isPlaying.value = true
+                            // _isPlaying updated by PlayerController directly
                         }
                     }
                 }
@@ -281,6 +319,16 @@ class MainActivity : ComponentActivity() {
 
         registerReceiver(playerStateReceiver, filter)
     }
+
+    // This is the actual Android Activity lifecycle method to override
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        // Set the activity's current intent to the new one
+        setIntent(intent)
+        // Emit the new intent to the SharedFlow for Composables to observe
+        intent?.let { _newIntentFlow.tryEmit(it) } // Use tryEmit for non-suspending context
+    }
+
 
     override fun onDestroy() {
         unregisterReceiver(playerStateReceiver)

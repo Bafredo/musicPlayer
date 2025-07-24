@@ -15,6 +15,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
+import com.muyoma.thapab.service.PlayerController
+import com.muyoma.thapab.service.PlayerController.currentSong
 import com.muyoma.thapab.ui.composables.AlbumCarousel
 import com.muyoma.thapab.ui.composables.MostPlayedCarousel
 import com.muyoma.thapab.ui.composables.PlayListDialog
@@ -45,7 +47,7 @@ fun Explore(dataViewModel: DataViewModel,navController: NavController) {
             modifier = Modifier
                 .background(gradientBackground)
                 .fillMaxSize()
-                .padding(16.dp),
+                .padding(1.dp,16.dp),
             verticalArrangement = Arrangement.spacedBy(32.dp)
         ) {
             item {
@@ -61,11 +63,19 @@ fun Explore(dataViewModel: DataViewModel,navController: NavController) {
                 }
             }
             item {
+                val playing = PlayerController._isPlaying.collectAsState().value
                 SectionHeader("Most Played")
                 MostPlayedCarousel(
                     mostPlayed,
                     currentSong = dataViewModel.currentSong.collectAsState().value,
-                    play = {dataViewModel.playSong(context,it)},
+                    play = {
+                        if(it == currentSong.value && playing)
+                            dataViewModel.pauseSong(context)
+                        else if(it == currentSong.value && !playing)
+                            dataViewModel.unpauseSong(context)
+                        else
+                            dataViewModel.playSong(context,it)
+                           },
                 )
             }
 

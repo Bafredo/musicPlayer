@@ -10,8 +10,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -26,10 +26,9 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -49,18 +48,28 @@ import com.muyoma.thapab.viewmodel.DataViewModel
 
 @Composable
 fun Player(
-    s: Song,
+    s: Song, // This 's' is the song received via navigation (e.g., from notification or song list)
     dataViewModel: DataViewModel
 ) {
+    val context = LocalContext.current
 
-    val context  = LocalContext.current
-    val song = dataViewModel.currentSong.collectAsState().value!!
-    val isLiked by remember {
-        mutableStateOf(
-            dataViewModel.likedSongs.value.indexOf(s) >= 0
-        )
+    // Observe the currently playing song from the ViewModel
+    // This ensures the UI updates if the song changes (e.g., next/previous)
+    val currentPlayingSong by dataViewModel.currentSong.collectAsState()
+
+    // Observe the liked status of the currently playing song from the ViewModel
+    val isLiked by dataViewModel.currentSongLiked.collectAsState()
+
+    // Use LaunchedEffect to trigger playSong when 's' changes (i.e., when navigated to this player)
+    // This ensures the song starts playing and player UI becomes visible.
+    LaunchedEffect(s) {
+        dataViewModel.playSong(context, s)
     }
 
+    // Ensure we have a song to display. If currentPlayingSong is null, maybe show a loading indicator or go back.
+    // For now, we'll assume currentPlayingSong will quickly become 's' due to the playSong call above.
+    // You might want to add a check here for null currentPlayingSong to avoid crashes if playSong fails.
+    val displaySong = currentPlayingSong ?: s // Fallback to 's' if currentPlayingSong is not yet updated
 
     Column(
         verticalArrangement = Arrangement.SpaceBetween,
@@ -84,7 +93,8 @@ fun Player(
             Icon(
                 imageVector = Icons.Default.KeyboardArrowDown,
                 contentDescription = "Close Player",
-                tint = Color.White
+                tint = Color.White,
+                modifier = Modifier.clickable { /* TODO: Implement navigation back or dismiss player */ }
             )
             Text(
                 text = "PLAYING FROM LIBRARY",
@@ -94,7 +104,8 @@ fun Player(
             Icon(
                 imageVector = Icons.Default.MoreVert,
                 contentDescription = "More Options",
-                tint = Color.White
+                tint = Color.White,
+                modifier = Modifier.clickable { /* TODO: Implement more options dialog */ }
             )
         }
 
@@ -108,9 +119,9 @@ fun Player(
             elevation = androidx.compose.material3.CardDefaults.cardElevation(10.dp)
         ) {
             Image(
-                painter = if(song.coverResId != null)rememberAsyncImagePainter(model = song.coverResId)
+                painter = if(displaySong.coverResId != R.drawable.bg) rememberAsyncImagePainter(model = displaySong.coverResId)
                 else painterResource(R.drawable.bg),
-                contentDescription = "Album Art",
+                contentDescription = "Album Art for ${displaySong.title}",
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()
             )
@@ -142,56 +153,58 @@ fun Player(
                 Icon(
                     imageVector = Icons.Default.Repeat,
                     contentDescription = "Repeat",
-                    tint = Color.White
+                    tint = Color.White,
+                    modifier = Modifier.clickable {
+                        // Implement repeat toggle logic here in DataViewModel
+                        // dataViewModel.toggleRepeat() // Example
+                    }
                 )
 
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        text = song.title.uppercase(),
+                        text = displaySong.title.uppercase(),
                         color = Color.White,
                         fontSize = 18.sp,
                         modifier = Modifier
-                            .width(180.dp),
+                            .width(180.dp), // Consider using fillMaxWidth with padding instead of fixed width
                         overflow = TextOverflow.MiddleEllipsis,
                         maxLines = 1
                     )
                     Text(
-                        text = song.artist.uppercase(),
+                        text = displaySong.artist.uppercase(),
                         color = Color.Gray,
                         fontSize = 12.sp,
                         maxLines = 1,
                         softWrap = false,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier
-                            .width(120.dp),
+                            .width(120.dp), // Consider using fillMaxWidth with padding
                     )
                 }
 
                 Icon(
-                    imageVector = if(dataViewModel.currentSongLiked.collectAsState().value) Icons.Default.Favorite else Icons.Outlined.FavoriteBorder,
+                    imageVector = if (isLiked) Icons.Default.Favorite else Icons.Outlined.FavoriteBorder,
                     contentDescription = "Like Song",
                     tint = Color.White,
-                    modifier = Modifier
-                        .clickable{
-                            if(dataViewModel.isSongLiked(s))
-                                dataViewModel.unlikeSong(s)
-                            else
-                                dataViewModel.likeSong(s)
-                        }
-
+                    modifier = Modifier.clickable {
+                        // Use displaySong to like/unlike
+                        if (isLiked)
+                            dataViewModel.unlikeSong(displaySong)
+                        else
+                            dataViewModel.likeSong(displaySong)
+                    }
                 )
             }
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Progress Slider
+            // Music Progress Tracker and Playback Controls
             MusicProgressTracker(
-          play = { dataViewModel.playSong(context,song)},
+                play = { dataViewModel.unpauseSong(context) }, // Use unpause for resuming
                 pause = { dataViewModel.pauseSong(context) },
                 duration = dataViewModel.getDuration(),
-                next = {dataViewModel.playNext(context)},
-                prev = {dataViewModel.playPrev(context)}
-
+                next = { dataViewModel.playNext(context) },
+                prev = { dataViewModel.playPrev(context) }
             )
 
             Spacer(modifier = Modifier.height(12.dp))
@@ -207,12 +220,16 @@ fun Player(
                 Icon(
                     imageVector = Icons.Default.Headset,
                     contentDescription = "Headset",
-                    tint = Color.White
+                    tint = Color.White,
+                    modifier = Modifier.clickable { /* TODO: Implement device selection/output */ }
                 )
                 Icon(
                     imageVector = Icons.Outlined.Add,
-                    contentDescription = "Add",
-                    tint = Color.White
+                    contentDescription = "Add to Playlist",
+                    tint = Color.White,
+                    modifier = Modifier.clickable {
+                        dataViewModel.togglePlaylistSheet(true) // Pass the song to add
+                    }
                 )
             }
         }

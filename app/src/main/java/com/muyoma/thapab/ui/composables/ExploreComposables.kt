@@ -69,7 +69,7 @@ fun SectionHeader(title: String ,modifier: Modifier = Modifier) {
         style = MaterialTheme.typography.headlineSmall,
         fontWeight = FontWeight.ExtraBold,
         color = Color.Gray,
-        modifier = modifier.padding(bottom = 8.dp)
+        modifier = modifier.padding(12.dp,4.dp)
     )
 }
 
@@ -178,13 +178,19 @@ fun AlbumCarousel(songs: List<Song>) {
 @Composable
 fun MostPlayedCarousel(songs: List<Song>, currentSong: Song?, play: (Song) -> Unit) {
 
-    LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+    LazyRow(
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        modifier = Modifier
+            .padding(3.dp,1.dp)
+    ) {
 
         items(songs.size) { index ->
             MostPlayedCard(
                 song = songs[index],
                 isPlaying = currentSong == songs[index] && PlayerController._isPlaying.collectAsState().value,
-                play = {play(songs[index])},
+                play = {
+                    play(songs[index])
+                       },
             )
         }
     }
@@ -253,7 +259,7 @@ fun SongCard(song: Song) {
 fun MostPlayedCard(song: Song, isPlaying: Boolean, play: ()->Unit) {
     Card(
         modifier = Modifier
-            .size(160.dp),
+            .size(200.dp),
 //            .shadow(1.dp, RoundedCornerShape(12.dp), true, Color.Cyan),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = Color.Transparent),
@@ -269,7 +275,7 @@ fun MostPlayedCard(song: Song, isPlaying: Boolean, play: ()->Unit) {
                 else painterResource(R.drawable.bg),
                 contentDescription = song.title,
                 modifier = Modifier
-                    .size(160.dp)
+                    .size(200.dp)
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(12.dp))
                     .clickable { play()}
