@@ -1,9 +1,12 @@
 package com.muyoma.thapab.viewmodel
 
 import android.app.Application
+import android.app.DownloadManager
 import android.content.Context
 import android.content.Intent
+import android.net.Uri // Import Uri
 import android.os.Build
+import android.os.Environment
 import android.provider.MediaStore
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -12,7 +15,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.muyoma.thapab.R
-import com.muyoma.thapab.data.DBHandler // Ensure this import is correct
+import com.muyoma.thapab.data.DBHandler
 import com.muyoma.thapab.models.Playlist
 import com.muyoma.thapab.models.Song
 import com.muyoma.thapab.service.PlayerController
@@ -24,19 +27,28 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.collections.emptyList
+import android.util.Log // Import for Android's Log
+
+// Ktor Client imports
+import com.muyoma.thapab.network.ApiService
+import com.muyoma.thapab.network.ApiServiceImpl
+import com.muyoma.thapab.network.models.YoutubeVideo // Import your Ktor models
+import java.net.URLEncoder
 
 class DataViewModel(application: Application) : AndroidViewModel(application) {
 
     // Use the singleton instance of DBHandler
     private val dbHandler: DBHandler = DBHandler.getInstance(application.applicationContext)
 
+    // Ktor API Service instance
+    private val apiService: ApiService = ApiServiceImpl() // Initialize your API service
+
     var _songs = MutableStateFlow<List<Song>>(emptyList())
-    var songs : StateFlow<List<Song>> = _songs.asStateFlow()
+    var songs: StateFlow<List<Song>> = _songs.asStateFlow()
 
     val _currentSong = PlayerController._currentSong
     val currentSong: StateFlow<Song?> = _currentSong.asStateFlow()
 
-    // Initialize _isPlaying based on PlayerController's actual state
     val _isPlaying = MutableStateFlow<Boolean>(PlayerController.isPlaying())
     val isPlaying: StateFlow<Boolean> = _isPlaying.asStateFlow()
     val _currentSongLiked = MutableStateFlow<Boolean>(false)
@@ -45,37 +57,45 @@ class DataViewModel(application: Application) : AndroidViewModel(application) {
     val showPlayer: StateFlow<Boolean> = _showPlayer.asStateFlow()
     var _playLists = MutableStateFlow<List<Playlist>>(emptyList())
     var playlists = _playLists.asStateFlow()
+    val _openPlayListOptions = MutableStateFlow<Boolean>(false)
+    val openPlayListOptions : StateFlow<Boolean> = _openPlayListOptions.asStateFlow()
 
     var _showPlayListSheet = MutableStateFlow<Boolean>(false)
     val showPlayListSheet = _showPlayListSheet.asStateFlow()
     private val _likedSongs = MutableStateFlow<List<Song>>(emptyList())
     val likedSongs = _likedSongs.asStateFlow()
-    // val context = application.applicationContext // No longer directly needed here for DBHandler
 
     var _selectedSong = MutableStateFlow<Song?>(null)
-    val selectedSong : StateFlow<Song?> = _selectedSong.asStateFlow()
+    val selectedSong: StateFlow<Song?> = _selectedSong.asStateFlow()
 
     var _selectedPlaylist = MutableStateFlow<String?>(null)
-    val selectedPlaylist : StateFlow<String?> = _selectedPlaylist.asStateFlow()
+    val selectedPlaylist: StateFlow<String?> = _selectedPlaylist.asStateFlow()
 
     val _repeatSong = MutableStateFlow<Boolean>(false)
     val repeatSong = _repeatSong.asStateFlow()
 
     var _currentList = MutableStateFlow<List<Song>>(songs.value)
-    val currentList : StateFlow<List<Song>> = _currentList.asStateFlow()
+    val currentList: StateFlow<List<Song>> = _currentList.asStateFlow()
 
+    // --- Ktor related StateFlows ---
+    private val _youtubeSearchResults = MutableStateFlow<List<YoutubeVideo>>(emptyList())
+    val youtubeSearchResults = _youtubeSearchResults.asStateFlow()
 
+    private val _downloadStatus = MutableStateFlow<String?>(null)
+    val downloadStatus = _downloadStatus.asStateFlow()
+
+    private val _apiErrorMessage = MutableStateFlow<String?>(null)
+    val apiErrorMessage = _apiErrorMessage.asStateFlow()
+    // ---------------------------------
 
 
     fun togglePlaylistSheet(show: Boolean) {
         _showPlayListSheet.value = show
     }
 
-    // This function will now be called from a background thread
     fun refreshLikedSongs() {
         viewModelScope.launch(Dispatchers.IO) {
-            val updatedLikedSongs = getLikedSongs() // This now runs on IO
-            // Update MutableStateFlow on the Main thread to ensure UI observes changes correctly
+            val updatedLikedSongs = getLikedSongs()
             withContext(Dispatchers.Main) {
                 _likedSongs.value = updatedLikedSongs
             }
@@ -83,27 +103,21 @@ class DataViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     init {
-        // Load initial data in a background coroutine when the ViewModel is created
         viewModelScope.launch(Dispatchers.IO) {
             getAllSongs(application.applicationContext)
-            // After songs are loaded, refresh liked songs and playlists
-            refreshLikedSongs() // This will now internally use Dispatchers.IO
-            loadPlaylistsFromDB(songs.value) // This will now internally use Dispatchers.IO
+            refreshLikedSongs()
+            loadPlaylistsFromDB(songs.value)
         }
 
-        // Observe PlayerController's playing state to update _isPlaying in ViewModel
-        // This ensures the UI state in the ViewModel always matches the actual player
         viewModelScope.launch {
             PlayerController._isPlaying.collect { isPlaying ->
                 _isPlaying.value = isPlaying
             }
         }
 
-        // Observe PlayerController's current song to update liked status
         viewModelScope.launch {
             PlayerController._currentSong.collect { song ->
                 song?.let {
-                    // Update liked status for the new current song
                     viewModelScope.launch(Dispatchers.IO) {
                         val liked = isSongLiked(it)
                         withContext(Dispatchers.Main) {
@@ -111,7 +125,6 @@ class DataViewModel(application: Application) : AndroidViewModel(application) {
                         }
                     }
                 } ?: run {
-                    // If current song becomes null (e.g., player stopped), set liked to false
                     _currentSongLiked.value = false
                 }
             }
@@ -120,70 +133,61 @@ class DataViewModel(application: Application) : AndroidViewModel(application) {
 
     fun likeSong(song: Song) {
         viewModelScope.launch(Dispatchers.IO) {
-            dbHandler.likeSong(song.data) // Use song.data (URI) for liked songs based on DB schema
-            // No need to set _currentSongLiked.value here, it will be updated by the PlayerController._currentSong observer
+            dbHandler.likeSong(song.data)
             _currentSongLiked.value = true
-            refreshLikedSongs() // Refresh liked songs list in background
+            refreshLikedSongs()
         }
     }
 
     fun unlikeSong(song: Song) {
         viewModelScope.launch(Dispatchers.IO) {
-            dbHandler.unlikeSong(song.data) // Use song.data (URI) for liked songs based on DB schema
-            // No need to set _currentSongLiked.value here, it will be updated by the PlayerController._currentSong observer
+            dbHandler.unlikeSong(song.data)
             _currentSongLiked.value = false
-            refreshLikedSongs() // Refresh liked songs list in background
+            refreshLikedSongs()
         }
     }
 
-    // This method will be called from within coroutines, so no need for explicit dispatch
     fun isSongLiked(song: Song?): Boolean {
-        // Use song.data (URI) for liked songs based on DB schema
         return song?.let { dbHandler.isSongLiked(it.data) } ?: false
     }
 
-    // This method will be called from within coroutines, so no need for explicit dispatch
     fun getLikedSongs(): List<Song> {
         val likedUris = dbHandler.getLikedSongs().toSet()
-        // Filter the main song list based on liked URIs
         return songs.value.filter { likedUris.contains(it.data) }
     }
 
     fun createPlaylist(name: String) {
         viewModelScope.launch(Dispatchers.IO) {
             dbHandler.createPlaylist(name)
-            loadPlaylistsFromDB(songs.value) // Reload playlists after creation
+            loadPlaylistsFromDB(songs.value)
         }
     }
 
     fun deletePlaylist(name: String) {
         viewModelScope.launch(Dispatchers.IO) {
             dbHandler.deletePlaylist(name)
-            loadPlaylistsFromDB(songs.value) // Reload playlists after deletion
+            loadPlaylistsFromDB(songs.value)
         }
     }
 
-    // This method can remain synchronous if it's only called from within a coroutine
     fun getAllPlaylists(): List<String> {
         return dbHandler.getAllPlaylists()
     }
 
     fun addSongToPlaylist(playlistName: String, song: Song) {
         viewModelScope.launch(Dispatchers.IO) {
-            dbHandler.addSongToPlaylist(playlistName, song.data) // Use song.data (URI)
-            // No need to refresh liked songs here, it's unrelated
-            loadPlaylistsFromDB(allSongs = songs.value) // Reload playlists after modification
+            dbHandler.addSongToPlaylist(playlistName, song.data)
+            loadPlaylistsFromDB(allSongs = songs.value)
         }
     }
 
     fun removeSongFromPlaylist(playlistName: String = selectedPlaylist.value!!, song: Song = selectedSong.value!!) {
         viewModelScope.launch(Dispatchers.IO) {
-            dbHandler.removeSongFromPlaylist(playlistName, song.data) // Use song.data (URI)
-            loadPlaylistsFromDB(songs.value) // Reload playlists after modification
+            dbHandler.removeSongFromPlaylist(playlistName, song.data)
+            loadPlaylistsFromDB(songs.value)
         }
     }
 
-    // This method will be called from within coroutines, so no need for explicit dispatch
     fun getSongsFromPlaylist(playlistName: String): List<Song> {
         return dbHandler.getSongsFromPlaylist(
             playlistName,
@@ -191,18 +195,19 @@ class DataViewModel(application: Application) : AndroidViewModel(application) {
         )
     }
 
-    fun repeatSong(s: Song){
+    fun repeatSong(s: Song) {
         _repeatSong.value = true
     }
-    fun undoRepeat(){
+
+    fun undoRepeat() {
         _repeatSong.value = false
     }
+
     fun toggleRepeat() {
-            _repeatSong.value = !_repeatSong.value
+        _repeatSong.value = !_repeatSong.value
     }
 
-    // This function now runs entirely on Dispatchers.IO due to its call site in init {}
-    fun getAllSongs(context: Context){
+    fun getAllSongs(context: Context) {
         val songList = mutableListOf<Song>()
         val collection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
@@ -236,7 +241,7 @@ class DataViewModel(application: Application) : AndroidViewModel(application) {
 
             while (cursor.moveToNext()) {
                 val song = Song(
-                    id = cursor.getLong(idCol).toString(), // Ensure ID is String if used as such in DB
+                    id = cursor.getLong(idCol).toString(),
                     title = cursor.getString(titleCol),
                     artist = cursor.getString(artistCol),
                     data = cursor.getString(dataCol)
@@ -244,117 +249,114 @@ class DataViewModel(application: Application) : AndroidViewModel(application) {
                 songList += song
             }
         }
-        // Update MutableStateFlows on the Main thread after data is prepared
         viewModelScope.launch(Dispatchers.Main) {
             _songs.value = songList
-            // Set initial current song only if it's not already set (e.g., from a deep link)
             if (_currentSong.value == null && songList.isNotEmpty()) {
                 _currentSong.value = songList.first()
             }
-            // Liked status will be updated by the observer for _currentSong
-            // _currentSongLiked.value = isSongLiked(currentSong.value)
-
             recommended = songList.take(5)
             mostPopular = songList.takeLast(5)
             mostPlayed = songList.shuffled().take(5)
-            // refreshLikedSongs() and loadPlaylistsFromDB are already launched from init{}
         }
     }
 
 
-    fun playSong(context: Context, song: Song, playlist : List<Song> = songs.value) {
-        // Check if the same song is already playing
+    // MODIFIED: playSong to handle local files or streaming from your backend
+    fun playSong(context: Context, song: Song, playlist: List<Song> = songs.value) {
+        // If the same song is already playing and it's a local file, do nothing
         if (PlayerController.isPlaying() && PlayerController.playingSong.value?.id == song.id) {
-            println("DataViewModel: Song already playing, no need to restart service.")
-            return // Do nothing if the same song is already playing
+            Log.d("DataViewModel", "Song already playing, no need to restart service.")
+            return
         }
 
-        // If a different song is playing, or nothing is playing, proceed.
-        println("DataViewModel: Initiating playback for new song: ${song.title}")
+        Log.d("DataViewModel", "Initiating playback for new song: ${song.title} from data: ${song.data}")
+
+        // Determine if the song is a local file or a remote URL (from your server)
+        val isLocalFile = try {
+            val uri = Uri.parse(song.data)
+            // Check if it's a file URI or content URI, indicating a local file
+            uri.scheme == "file" || uri.scheme == "content"
+        } catch (e: Exception) {
+            // If parsing fails, assume it's not a standard local file URI, might be a raw path or external URL
+            Log.e("DataViewModel", "Error parsing song.data as URI: ${song.data}", e)
+            false
+        }
 
         // Call PlayerController to start playback
+        // PlayerController.play handles the MediaPlayer lifecycle
         PlayerController.play(context, song)
 
-        // Send intent to PlayerService
+        // Update UI-related states immediately on the Main thread
         _currentList.value = playlist
+        _showPlayer.value = true
+        _currentSong.value = song
+
+        // Start the PlayerService (even if local, to manage notification and background playback)
         val serviceIntent = Intent(context, PlayerService::class.java).apply {
             action = PlayerService.ACTION_PLAY
             putExtra(PlayerService.EXTRA_SONG, song)
             putParcelableArrayListExtra(PlayerService.EXTRA_SONG_LIST, ArrayList(playlist))
         }
         ContextCompat.startForegroundService(context, serviceIntent)
-
-        // Update UI-related states immediately on the Main thread
-        _showPlayer.value = true // Show the player UI
-        _currentSong.value = song // Update current song in ViewModel
-        // _isPlaying.value = true // This will be updated by the PlayerController._isPlaying observer
-        // Liked status will be updated by the PlayerController._currentSong observer
     }
 
     fun pauseSong(context: Context) {
         if (!PlayerController.isPlaying()) {
-            println("DataViewModel: Song already paused, no action needed.")
+            Log.d("DataViewModel", "Song already paused, no action needed.")
             return
         }
         PlayerController.pause()
-        // _isPlaying.value = false // This will be updated by the PlayerController._isPlaying observer
-
         val pauseIntent = Intent(context, PlayerService::class.java).apply {
             action = PlayerService.ACTION_PAUSE
         }
-        context.startService(pauseIntent) // Use startService for pause, it doesn't need to be foreground-started again
+        context.startService(pauseIntent)
     }
 
     fun unpauseSong(context: Context) {
         if (PlayerController.isPlaying()) {
-            println("DataViewModel: Song already playing, no need to unpause.")
+            Log.d("DataViewModel", "Song already playing, no need to unpause.")
             return
         }
         PlayerController.resume()
-        // _isPlaying.value = true // This will be updated by the PlayerController._isPlaying observer
-        _showPlayer.value = true // Ensure player UI is visible if unpaused
+        _showPlayer.value = true
 
-        // Send a play action to the service to update its notification if necessary
         val playIntent = Intent(context, PlayerService::class.java).apply {
-            action = PlayerService.ACTION_PLAY // Use play action to update notification
-            putExtra(PlayerService.EXTRA_SONG, _currentSong.value) // Pass current song for notification update
+            action = PlayerService.ACTION_PLAY
+            putExtra(PlayerService.EXTRA_SONG, _currentSong.value)
         }
         ContextCompat.startForegroundService(context, playIntent)
     }
 
-    fun playNext(context: Context){
+    fun playNext(context: Context) {
         var index = currentList.value.indexOf(currentSong.value)
-        if (index == (currentList.value.size-1)){
+        if (index == (currentList.value.size - 1)) {
             _currentSong.value = currentList.value.first()
-            // Liked status will be updated by the PlayerController._currentSong observer
         } else {
             _currentSong.value = currentList.value[++index]
-            // Liked status will be updated by the PlayerController._currentSong observer
         }
-        currentSong.value?.let { it->
-            playSong(context,it,currentList.value)
+        currentSong.value?.let { it ->
+            playSong(context, it, currentList.value)
         }
     }
 
-    fun playPrev(context: Context){
+    fun playPrev(context: Context) {
         var index = currentList.value.indexOf(currentSong.value)
-        if (index == 0){
+        if (index == 0) {
             _currentSong.value = currentList.value.last()
-            // Liked status will be updated by the PlayerController._currentSong observer
         } else {
             _currentSong.value = currentList.value[--index]
-            // Liked status will be updated by the PlayerController._currentSong observer
         }
-        currentSong.value?.let { it->
-            playSong(context,it,currentList.value)
+        currentSong.value?.let { it ->
+            playSong(context, it, currentList.value)
         }
     }
 
 
-    fun stopSong(){
+    fun stopSong() {
         PlayerController.stop()
     }
-    fun getDuration() : Float{
+
+    fun getDuration(): Float {
         return PlayerController.mediaPlayer?.duration?.toFloat() ?: 3.00f
     }
 
@@ -367,15 +369,12 @@ class DataViewModel(application: Application) : AndroidViewModel(application) {
     var mostPlayed by mutableStateOf(emptyList<Song>())
         private set
 
-    // This function will now be called from a background thread
     fun loadPlaylistsFromDB(allSongs: List<Song>) {
         viewModelScope.launch(Dispatchers.IO) {
             val loadedPlaylists = dbHandler.getAllPlaylists().mapIndexed { index, name ->
-                // Ensure cleanUpInvalidSongsInPlaylist is also running on a background thread
                 cleanUpInvalidSongsInPlaylist(name, allSongs)
-                // getSongsFromPlaylist is also a DB call, so it's good it's in a Dispatchers.IO scope
                 val songsInPlaylist = dbHandler.getSongsFromPlaylist(name, allSongs)
-                println("$name : ${songsInPlaylist.map { it.title }}") // Log song titles for better debugging
+                Log.d("DataViewModel", "$name : ${songsInPlaylist.map { it.title }}") // Use Android's Log
                 Playlist(
                     id = index.toLong(),
                     title = name,
@@ -383,7 +382,6 @@ class DataViewModel(application: Application) : AndroidViewModel(application) {
                     thumbnail = pickThumbnailFor(name, index),
                 )
             }
-            // Update MutableStateFlow on the Main thread
             withContext(Dispatchers.Main) {
                 _playLists.value = loadedPlaylists
             }
@@ -401,17 +399,114 @@ class DataViewModel(application: Application) : AndroidViewModel(application) {
         return songs.value.find { it.title == title }
     }
 
-    // This function also contains DB operations and should be called from a background thread
     fun cleanUpInvalidSongsInPlaylist(playlistName: String, allSongs: List<Song>) {
-        val validUris = allSongs.map { it.data }.toSet() // Use song.data (URI)
+        val validUris = allSongs.map { it.data }.toSet()
         val playlistSongUris = dbHandler.getSongsFromPlaylist(playlistName, allSongs = allSongs)
-            .map { it.data } // Use song.data (URI)
+            .map { it.data }
 
         playlistSongUris.forEach { uri ->
             if (!validUris.contains(uri)) {
-                dbHandler.removeSongFromPlaylist(playlistName, uri) // Use song.data (URI)
-                println("Removed stale song URI=$uri from playlist=$playlistName")
+                dbHandler.removeSongFromPlaylist(playlistName, uri)
+                Log.i("DataViewModel", "Removed stale song URI=$uri from playlist=$playlistName") // Use Android's Log
             }
         }
+    }
+
+    // --- New Ktor Client Functions ---
+
+    /**
+     * Searches for a song on YouTube using the backend API.
+     * Updates _youtubeSearchResults and _apiErrorMessage.
+     */
+    fun searchSongOnYouTube(query: String) {
+        _apiErrorMessage.value = null // Clear previous errors
+        _youtubeSearchResults.value = emptyList() // Clear previous results
+        viewModelScope.launch {
+            try {
+                val youtubeVideo = apiService.searchYoutubeVideo(query)
+                _youtubeSearchResults.value = listOf(youtubeVideo) // Assuming your backend returns max 1 result
+                Log.d("DataViewModel", "Youtube successful: ${youtubeVideo.title}")
+            } catch (e: Exception) {
+                Log.e("DataViewModel", "Error searching YouTube: ${e.message}", e)
+                _apiErrorMessage.value = "Search failed: ${e.message}"
+            }
+        }
+    }
+
+    /**
+     * Initiates the download of a YouTube video on the backend server.
+     * Updates _downloadStatus and _apiErrorMessage.
+     * Note: This only starts the download on the server; actual completion needs further handling.
+     */
+    fun downloadYoutubeSong(youtubeVideo: YoutubeVideo) {
+        _apiErrorMessage.value = null // Clear previous errors
+        _downloadStatus.value = "Starting download on server..."
+        viewModelScope.launch {
+            try {
+                val response = apiService.downloadAudio(youtubeVideo.videoId, youtubeVideo.title)
+                _downloadStatus.value = response.message // e.g., "Download started"
+                Log.d("DataViewModel", "Download initiated for ${youtubeVideo.title}: ${response.message}, file: ${response.file}")
+
+                // IMPORTANT: At this point, the file is only being downloaded ON YOUR SERVER.
+                // To play it on the app, you have two main options:
+                // 1. Stream it from your server using the /stream endpoint.
+                // 2. Download the MP3 file from your server to the Android device's local storage.
+
+                // Option 1: Stream the song immediately after download is initiated on server
+                // This assumes your PlayerController can handle network URLs.
+                // You'd need a Song object representing the streamable file.
+                // Example: Create a temporary Song object for streaming
+                val streamableSong = Song(
+                    id = "stream_${youtubeVideo.videoId}", // Unique ID for streamed song
+                    title = youtubeVideo.title,
+                    artist = "YouTube",
+                    data = apiService.getStreamUrl(response.file), // This is the URL for streaming
+                    coverResId = R.drawable.bg // Placeholder
+                )
+
+                // You might want to ask the user if they want to stream or download
+                // For now, let's assume immediate streaming
+                Log.d("DataViewModel", "Attempting to stream from: ${streamableSong.data}")
+                playSong(getApplication<Application>().applicationContext, streamableSong, listOf(streamableSong))
+
+
+                // Option 2 (If you want to download to device):
+                // You would typically kick off an Android DownloadManager request here
+                // to pull the file from your /stream endpoint to local storage.
+                // After local download completes, then add to your local songs.
+                // This is more complex and out of scope for just integrating Ktor calls.
+
+            } catch (e: Exception) {
+                Log.e("DataViewModel", "Error during download initiation: ${e.message}", e)
+                _downloadStatus.value = "Download initiation failed!"
+                _apiErrorMessage.value = "Download failed: ${e.message}"
+            }
+        }
+    }
+    // ---------------------------------
+
+    fun downloadMp3ToPhone(context: Context, videoId: String, title: String) {
+        val sanitizedTitle = title.replace(Regex("[<>:\"/\\\\|?*\\x00-\\x1F]"), "").take(80)
+        val fileName = "${sanitizedTitle}_$videoId.mp3"
+        val url = "http://muyoma.site/download-file?videoId=$videoId&title=${URLEncoder.encode(title, "UTF-8")}"
+
+        val request = DownloadManager.Request(Uri.parse(url)).apply {
+            setTitle("Downloading $title")
+            setDescription("Saving to Music folder")
+            setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+            setDestinationInExternalPublicDir(Environment.DIRECTORY_MUSIC, fileName)
+            setAllowedOverMetered(true)
+            setAllowedOverRoaming(true)
+        }
+
+        val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+        downloadManager.enqueue(request)
+        getAllSongs(context)
+    }
+
+    fun clearYoutubeSearchResults() {
+        _youtubeSearchResults.value = emptyList()
+        _apiErrorMessage.value = null
+        _downloadStatus.value = null
     }
 }

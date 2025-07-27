@@ -1,9 +1,11 @@
 package com.muyoma.thapab
 
 import android.Manifest
+import android.app.DownloadManager
 import android.content.*
 import android.os.Build
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -55,12 +57,26 @@ class MainActivity : ComponentActivity() {
     // the collector is ready, it's not immediately dropped.
     private val _newIntentFlow = MutableSharedFlow<Intent>(extraBufferCapacity = 1)
     val newIntentFlow = _newIntentFlow.asSharedFlow()
+    private lateinit var downloadReceiver: BroadcastReceiver
+
 
     @OptIn(ExperimentalMaterial3Api::class)
     @RequiresApi(Build.VERSION_CODES.S)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        downloadReceiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                if (intent.action == DownloadManager.ACTION_DOWNLOAD_COMPLETE) {
+                    val downloadId = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1L)
+
+                    // Optionally verify the downloadId is one you started
+                    Toast.makeText(context, "Download complete (ID: $downloadId)", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+        registerReceiver(downloadReceiver, IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE))
+
 
         setContent {
             AppTheme {
@@ -253,7 +269,7 @@ class MainActivity : ComponentActivity() {
                                 containerColor = Color(0XBF000000)
                             ) {
                                 PlaylistBottomSheet(
-                                    playlists = dataViewModel.playlists.collectAsState().value,
+                                    playlists = dataViewModel.getAllPlaylists(),
                                     onAddPlaylist = {
                                         dataViewModel.togglePlaylistSheet(false)
                                         showCreatePlaylist = true

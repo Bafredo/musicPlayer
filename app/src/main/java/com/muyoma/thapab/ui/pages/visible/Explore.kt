@@ -22,26 +22,32 @@ import com.muyoma.thapab.ui.composables.MadeForYouCard
 import com.muyoma.thapab.ui.composables.MadeForYouHeader
 import com.muyoma.thapab.ui.composables.MostPlayedCarousel
 import com.muyoma.thapab.ui.composables.PlayListDialog
+import com.muyoma.thapab.ui.composables.PlayListOptionsDialog
 import com.muyoma.thapab.ui.composables.PlayListSectionHeader
 import com.muyoma.thapab.ui.composables.PlayLister
 import com.muyoma.thapab.ui.composables.SectionHeader
 import com.muyoma.thapab.ui.composables.SongCarousel
 import com.muyoma.thapab.viewmodel.DataViewModel
+import kotlinx.coroutines.flow.asStateFlow
 
 
 @Composable
 fun Explore(dataViewModel: DataViewModel,navController: NavController) {
     val playLists = dataViewModel.playlists.collectAsState().value
     val mostPlayed = dataViewModel.mostPlayed
-    val mostPopular = dataViewModel.mostPopular
     val recommended = dataViewModel.recommended
+    val artists = dataViewModel.songs.collectAsState().value.distinctBy { it.artist }
     val context = LocalContext.current
+
 
     val gradientBackground = Brush.verticalGradient(
         listOf(Color(0xFF0F0F0F),Color(0xFF0F0F0F), Color.Black)
     )
     var showCreatePlaylist by remember{
         mutableStateOf(false)
+    }
+    var showPlayListOptions by remember {
+        mutableStateOf(dataViewModel._openPlayListOptions.asStateFlow().value)
     }
 
     Box{
@@ -64,7 +70,9 @@ fun Explore(dataViewModel: DataViewModel,navController: NavController) {
             }
             item {
                 PlayListSectionHeader("Playlists",{dataViewModel._showPlayListSheet.value = true})
-                if(playLists.isNotEmpty()){ PlayLister(playLists){ it->
+                if(playLists.isNotEmpty()){ PlayLister(playLists,
+                    options = {dataViewModel._selectedPlaylist.value = it; dataViewModel._openPlayListOptions.value= true}
+                    ){ it->
                     navController.navigate("playlist/${it}")
                     dataViewModel._selectedPlaylist.value = it
                     }
@@ -89,7 +97,7 @@ fun Explore(dataViewModel: DataViewModel,navController: NavController) {
 
             item {
                 SectionHeader("Artists")
-                AlbumCarousel(mostPopular)
+                AlbumCarousel(artists)
             }
             item {
                 SectionHeader("Must try")
@@ -107,6 +115,13 @@ fun Explore(dataViewModel: DataViewModel,navController: NavController) {
                 dataViewModel.createPlaylist(name)
                 showCreatePlaylist = false
             }
+        }
+        if(dataViewModel.openPlayListOptions.collectAsState().value){
+            PlayListOptionsDialog(
+                dataViewModel = dataViewModel,
+                context = context,
+                selectedPlayList = dataViewModel.selectedPlaylist.collectAsState().value!!
+            )
         }
 
     }

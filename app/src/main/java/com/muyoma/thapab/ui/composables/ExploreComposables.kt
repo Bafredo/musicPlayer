@@ -4,6 +4,7 @@ import androidx.compose.animation.core.exponentialDecay
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -54,6 +55,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -175,7 +177,11 @@ fun SongCarousel(songs: List<Song>) {
 
 @Composable
 fun AlbumCarousel(songs: List<Song>) {
-    LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+    LazyRow(
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        modifier = Modifier
+            .padding(10.dp,1.dp)
+        ) {
         items(songs.size) { index ->
             AlbumCard(song = songs[index])
         }
@@ -205,7 +211,7 @@ fun MostPlayedCarousel(songs: List<Song>, currentSong: Song?, play: (Song,List<S
 }
 
 @Composable
-fun PlayLister(playlists : List<Playlist>,explore : (String)->Unit){
+fun PlayLister(playlists : List<Playlist>, options: (String) -> Unit, explore : (String)->Unit){
     LazyVerticalGrid(
         columns = GridCells.Fixed(3), // 2 columns
         modifier = Modifier
@@ -217,7 +223,7 @@ fun PlayLister(playlists : List<Playlist>,explore : (String)->Unit){
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         items(playlists.size) { item ->
-            PlayListCard(playlists[item]){
+            PlayListCard(playlists[item], options = {options(it)} ){
                 explore(it)
             }
         }
@@ -390,7 +396,7 @@ fun AlbumCard(song: Song) {
 }
 
 @Composable
-fun PlayListCard(data : Playlist,explore : (String)->Unit){
+fun PlayListCard(data : Playlist,options : (String)->Unit,explore : (String)->Unit){
 
         Column(
             verticalArrangement = Arrangement.SpaceBetween,
@@ -398,11 +404,15 @@ fun PlayListCard(data : Playlist,explore : (String)->Unit){
             modifier = Modifier
 
                 .clip(RoundedCornerShape(12.dp))
+                .pointerInput(Unit){
+                    detectTapGestures (
+                        onTap = {explore(data.title)},
+                        onLongPress = {options(data.title)}
+                    )
+                }
                 .background(Color(0x79000000))
                 .padding(10.dp)
-                .clickable {
-                    explore(data.title)
-                },
+
         ) {
             Image(
                 painter = painterResource(data.thumbnail),

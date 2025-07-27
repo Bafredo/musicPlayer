@@ -23,7 +23,7 @@ import com.muyoma.thapab.models.Playlist
 
 @Composable
 fun PlaylistBottomSheet(
-    playlists: List<Playlist>,
+    playlists: List<String>,
     onAddPlaylist: () -> Unit,
     onDismiss: () -> Unit,
     onSelect : (String)->Unit
@@ -45,11 +45,11 @@ fun PlaylistBottomSheet(
                         .clip(RoundedCornerShape(12.dp))
                         .background(Color(0xFF1E1E1E))
                         .clickable{
-                            onSelect(playlist.title)
+                            onSelect(playlist)
                         }
                         .padding(12.dp)
                 ) {
-                    Text(playlist.title, color = Color.White)
+                    Text(playlist, color = Color.White)
                 }
             }
 

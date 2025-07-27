@@ -35,6 +35,8 @@ import com.muyoma.thapab.viewmodel.DataViewModel
 @Composable
 fun PlayListExplorer(dataViewModel: DataViewModel, navController: NavController, songs: List<Song>) {
     val displayImage = remember { mutableIntStateOf(0) }
+
+
     val nowPlaying = dataViewModel.currentSong.collectAsState()
     val isPlaying = dataViewModel.isPlaying.collectAsState()
     val context = LocalContext.current
@@ -44,10 +46,15 @@ fun PlayListExplorer(dataViewModel: DataViewModel, navController: NavController,
     var selectedSong = remember { mutableStateOf<Song?>(null) }
 
     fun toggleMedia() {
-        if (isPlaying.value) {
+        if (isPlaying.value && songs.contains(nowPlaying.value)) {
             dataViewModel.pauseSong(context)
         } else {
-            nowPlaying.value?.let { dataViewModel.playSong(context, it) }
+            if(songs.contains(nowPlaying.value)){
+                nowPlaying.value?.let { dataViewModel.playSong(context, it,songs) }
+
+            }else{
+                dataViewModel.playSong(context, songs.first(),songs)
+            }
         }
     }
 

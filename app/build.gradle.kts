@@ -3,6 +3,8 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     id("kotlin-parcelize")
+    id("org.jetbrains.kotlin.plugin.serialization") // <--- ADD THIS LINE
+
 }
 
 android {
@@ -47,6 +49,7 @@ dependencies {
     implementation(libs.androidx.ui.graphics)
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
+    implementation(libs.transport.runtime)
 //    implementation(libs.androidx.navigation.compose.jvmstubs)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
@@ -70,6 +73,12 @@ dependencies {
 // NotificationCompat (already part of core-ktx and androidx)
     implementation("androidx.core:core:1.16.0")
     implementation("io.coil-kt:coil-compose:2.7.0")
+
+    implementation("io.ktor:ktor-client-core:2.3.11") // Latest stable version as of now
+    implementation("io.ktor:ktor-client-android:2.3.11") // For Android engine
+    implementation("io.ktor:ktor-client-content-negotiation:2.3.11") // For JSON serialization
+    implementation("io.ktor:ktor-serialization-kotlinx-json:2.3.11")
+    implementation("io.ktor:ktor-client-logging:2.3.11")
 
 
 }
