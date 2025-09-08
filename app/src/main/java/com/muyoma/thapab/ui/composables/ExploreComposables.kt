@@ -1,59 +1,26 @@
 package com.muyoma.thapab.ui.composables
 
-import androidx.compose.animation.core.exponentialDecay
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.defaultMinSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.MusicNote
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Speaker
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.AddCircleOutline
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -64,35 +31,38 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
-import coil.compose.rememberAsyncImagePainter
 import coil.request.ImageRequest
 import com.muyoma.thapab.R
 import com.muyoma.thapab.models.Playlist
 import com.muyoma.thapab.models.Song
 import com.muyoma.thapab.service.PlayerController
-import kotlinx.coroutines.flow.asStateFlow
 
+// ------------------- Headers -------------------
 
 @Composable
-fun SectionHeader(title: String ,modifier: Modifier = Modifier) {
+fun SectionHeader(title: String, modifier: Modifier = Modifier) {
     Text(
         text = title,
         style = MaterialTheme.typography.headlineSmall,
         fontWeight = FontWeight.ExtraBold,
         color = Color.Gray,
-        modifier = modifier.padding(12.dp,4.dp)
+        modifier = modifier.padding(12.dp, 4.dp)
     )
 }
 
 @Composable
-fun PlayListSectionHeader(title: String ,add : ()->Unit,modifier: Modifier = Modifier) {
+fun PlayListSectionHeader(
+    title: String,
+    add: () -> Unit,
+    modifier: Modifier = Modifier
+) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
         modifier = Modifier
             .fillMaxWidth()
             .padding(10.dp, 1.dp)
-    ){
+    ) {
         Text(
             text = title,
             style = MaterialTheme.typography.headlineSmall,
@@ -100,18 +70,14 @@ fun PlayListSectionHeader(title: String ,add : ()->Unit,modifier: Modifier = Mod
             color = Color.Gray,
             modifier = modifier.padding(bottom = 8.dp)
         )
-        IconButton(
-            onClick = {
-                add()
-            }
-        ) {
-            Icon(
-                imageVector = Icons.Default.MoreVert,
-                null
-            )
+        IconButton(onClick = add) {
+            Icon(imageVector = Icons.Default.MoreVert, contentDescription = null)
         }
     }
 }
+
+// ------------------- Dialog -------------------
+
 @Composable
 fun PlayListDialog(
     title: String,
@@ -133,20 +99,14 @@ fun PlayListDialog(
             )
         },
         text = {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                OutlinedTextField(
-                    value = playlistName,
-                    onValueChange = { playlistName = it },
-                    label = { Text("Playlist name", color = Color.Gray) },
-                    singleLine = true,
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-            }
+            OutlinedTextField(
+                value = playlistName,
+                onValueChange = { playlistName = it },
+                label = { Text("Playlist name", color = Color.Gray) },
+                singleLine = true,
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            )
         },
         confirmButton = {
             Button(
@@ -169,11 +129,13 @@ fun PlayListDialog(
     )
 }
 
+// ------------------- Carousels -------------------
+
 @Composable
 fun SongCarousel(songs: List<Song>) {
     LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-        items(songs.size) { index ->
-            SongCard(song = songs[index])
+        itemsIndexed(songs, key = { _, song -> song.id }) { _, song ->
+            SongCard(song = song)
         }
     }
 }
@@ -183,50 +145,50 @@ fun AlbumCarousel(
     songs: List<Song>,
     playArtist: (String) -> Unit
 ) {
-    // ✅ keep only songs that have album art
-    val songsWithArt = songs.filter { it.albumArtUri != null }
+    val songsWithArt = remember(songs) { songs.filter { it.albumArtUri != null } }
 
     LazyRow(
         horizontalArrangement = Arrangement.spacedBy(16.dp),
         modifier = Modifier.padding(10.dp, 1.dp)
     ) {
-        items(songsWithArt.size) { index ->
-            val song = songsWithArt[index]
+        itemsIndexed(songsWithArt, key = { _, song -> song.id }) { _, song ->
             AlbumCard(song = song) {
-                // ✅ Always pass the first one with art
                 playArtist(songsWithArt.first().artist)
             }
         }
     }
 }
 
-
 @Composable
-fun MostPlayedCarousel(songs: List<Song>, currentSong: Song?, play: (Song,List<Song>) -> Unit) {
+fun MostPlayedCarousel(
+    songs: List<Song>,
+    currentSong: Song?,
+    play: (Song, List<Song>) -> Unit
+) {
+    val isPlaying by PlayerController._isPlaying.collectAsState()
 
     LazyRow(
         horizontalArrangement = Arrangement.spacedBy(16.dp),
-        modifier = Modifier
-            .padding(3.dp,1.dp),
-
+        modifier = Modifier.padding(3.dp, 1.dp)
     ) {
-
-        items(songs.size) { index ->
+        itemsIndexed(songs, key = { _, song -> song.id }) { _, song ->
             MostPlayedCard(
-                song = songs[index],
-                isPlaying = currentSong == songs[index] && PlayerController._isPlaying.collectAsState().value,
-                play = {
-                    play(songs[index],songs)
-                       },
+                song = song,
+                isPlaying = currentSong == song && isPlaying,
+                play = { play(song, songs) }
             )
         }
     }
 }
 
 @Composable
-fun PlayLister(playlists : List<Playlist>, options: (String) -> Unit, explore : (String)->Unit){
+fun PlayLister(
+    playlists: List<Playlist>,
+    options: (String) -> Unit,
+    explore: (String) -> Unit
+) {
     LazyVerticalGrid(
-        columns = GridCells.Fixed(3), // 2 columns
+        columns = GridCells.Fixed(3),
         modifier = Modifier
             .fillMaxWidth()
             .padding(10.dp, 1.dp)
@@ -235,13 +197,15 @@ fun PlayLister(playlists : List<Playlist>, options: (String) -> Unit, explore : 
         verticalArrangement = Arrangement.spacedBy(12.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        items(playlists.size) { item ->
-            PlayListCard(playlists[item], options = {options(it)} ){
-                explore(it)
-            }
+        itemsIndexed(playlists, key = { _, playlist ->
+            playlist.id ?: playlist.title.hashCode()
+        }) { _, playlist ->
+            PlayListCard(playlist, options = { options(it) }, explore = { explore(it) })
         }
     }
 }
+
+// ------------------- Cards -------------------
 
 @Composable
 fun SongCard(song: Song) {
@@ -273,7 +237,7 @@ fun SongCard(song: Song) {
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
-                overflow = TextOverflow.MiddleEllipsis
+                overflow = TextOverflow.Ellipsis
             )
             Text(
                 text = song.artist,
@@ -284,24 +248,19 @@ fun SongCard(song: Song) {
         }
     }
 }
+
 @Composable
-fun MostPlayedCard(song: Song, isPlaying: Boolean, play: ()->Unit) {
+fun MostPlayedCard(song: Song, isPlaying: Boolean, play: () -> Unit) {
     Card(
-        modifier = Modifier
-            .size(150.dp),
-//            .shadow(1.dp, RoundedCornerShape(12.dp), true, Color.Cyan),
+        modifier = Modifier.size(150.dp),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = Color.Transparent),
         elevation = CardDefaults.cardElevation(6.dp)
     ) {
-        Box(
-            modifier = Modifier
-                .padding(0.dp,0.dp,0.dp,8.dp)
-            ,
-        ) {
+        Box {
             AsyncImage(
                 model = ImageRequest.Builder(LocalContext.current)
-                    .data(song.albumArtUri) // Uri from MediaStore
+                    .data(song.albumArtUri)
                     .crossfade(true)
                     .build(),
                 contentDescription = "Album Art for ${song.title}",
@@ -311,44 +270,37 @@ fun MostPlayedCard(song: Song, isPlaying: Boolean, play: ()->Unit) {
                     .size(150.dp)
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(12.dp))
-                    .clickable { play() }
-                ,
+                    .clickable { play() },
                 contentScale = ContentScale.Crop
             )
-            Spacer(modifier = Modifier.height(12.dp))
-            Row (
+            Row(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .align(Alignment.BottomStart)
                     .fillMaxWidth()
                     .background(Color(0x6B00010E))
-            ){
-                Column(
-                    modifier = Modifier
-                        .padding(5.dp),
-                    ){
+            ) {
+                Column(modifier = Modifier.padding(5.dp)) {
                     Text(
                         text = song.title,
                         fontWeight = FontWeight.SemiBold,
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier
-                            .width(80.dp),
+                        modifier = Modifier.width(80.dp),
                         maxLines = 2
                     )
                     Text(
                         text = song.artist,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                        modifier = Modifier
-                            .width(80.dp),
+                        modifier = Modifier.width(80.dp),
                         maxLines = 1
                     )
                 }
                 Icon(
                     tint = Color.Black,
-                    imageVector = if(isPlaying ) Icons.Default.Pause else Icons.Default.PlayArrow,
+                    imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                     contentDescription = null,
                     modifier = Modifier
                         .padding(4.dp)
@@ -359,18 +311,14 @@ fun MostPlayedCard(song: Song, isPlaying: Boolean, play: ()->Unit) {
         }
     }
 }
+
 @Composable
-fun AlbumCard(song: Song,playArtist : (String)->Unit) {
+fun AlbumCard(song: Song, playArtist: (String) -> Unit) {
     Card(
-        modifier = Modifier
-            .width(100.dp),
+        modifier = Modifier.width(100.dp),
         colors = CardDefaults.cardColors(containerColor = Color.Transparent),
     ) {
-        Box(
-            modifier = Modifier
-                .padding(0.dp,0.dp,0.dp,8.dp)
-
-        ) {
+        Box {
             AsyncImage(
                 model = song.albumArtUri ?: song.coverResId,
                 contentDescription = song.title,
@@ -379,93 +327,70 @@ fun AlbumCard(song: Song,playArtist : (String)->Unit) {
                     .fillMaxWidth()
                     .shadow(20.dp, CircleShape, true, Color.White)
                     .clip(CircleShape)
-                    .clickable{playArtist(song.artist)}
-                ,
+                    .clickable { playArtist(song.artist) },
                 contentScale = ContentScale.Crop
             )
-            Row (
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
+            Icon(
+                tint = Color.LightGray,
+                imageVector = Icons.Default.MusicNote,
+                contentDescription = null,
                 modifier = Modifier
                     .align(Alignment.Center)
-            ){
-                Icon(
-                    tint = Color.LightGray,
-                    imageVector = Icons.Default.MusicNote,
-                    contentDescription = null,
-                    modifier = Modifier
-                        .padding(4.dp)
-                        .background(Color(0xBF000000), CircleShape)
-                        .padding(10.dp)
-                )
-            }
-        }
-        Row(
-            horizontalArrangement = Arrangement.Center,
-            modifier = Modifier
-                .fillMaxWidth()
-        ) {
-            Text(
-                text = song.artist,
-                fontWeight = FontWeight.Light,
-                fontSize = 14.sp,
-                color = Color.LightGray,
-                maxLines = 1
+                    .padding(4.dp)
+                    .background(Color(0xBF000000), CircleShape)
+                    .padding(10.dp)
             )
         }
+        Text(
+            text = song.artist,
+            fontWeight = FontWeight.Light,
+            fontSize = 14.sp,
+            color = Color.LightGray,
+            maxLines = 1,
+            modifier = Modifier.fillMaxWidth(),
+        )
     }
 }
 
 @Composable
-fun PlayListCard(data : Playlist,options : (String)->Unit,explore : (String)->Unit){
-
-        Column(
-            verticalArrangement = Arrangement.SpaceBetween,
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier
-
-                .clip(RoundedCornerShape(12.dp))
-                .pointerInput(Unit){
-                    detectTapGestures (
-                        onTap = {explore(data.title)},
-                        onLongPress = {options(data.title)}
-                    )
-                }
-                .background(Color(0x79000000))
-                .padding(10.dp)
-
-        ) {
-            Image(
-                painter = painterResource(data.thumbnail),
-                contentDescription = "Thumbnail",
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(10.dp))
-                    .width(100.dp)
-                    .aspectRatio(1f)
-            )
-            Column(
-                verticalArrangement = Arrangement.Top,
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(
-                    text = data.title,
-                    fontWeight = FontWeight.Medium,
-                    lineHeight = 10.sp,
-                    color = Color.Gray
+fun PlayListCard(data: Playlist, options: (String) -> Unit, explore: (String) -> Unit) {
+    Column(
+        verticalArrangement = Arrangement.SpaceBetween,
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .clip(RoundedCornerShape(12.dp))
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onTap = { explore(data.title) },
+                    onLongPress = { options(data.title) }
                 )
-
             }
-
-        }
-
+            .background(Color(0x79000000))
+            .padding(10.dp)
+    ) {
+        Image(
+            painter = painterResource(data.thumbnail),
+            contentDescription = "Thumbnail",
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .clip(RoundedCornerShape(10.dp))
+                .width(100.dp)
+                .aspectRatio(1f)
+        )
+        Text(
+            text = data.title,
+            fontWeight = FontWeight.Medium,
+            lineHeight = 10.sp,
+            color = Color.Gray,
+            modifier = Modifier.padding(top = 4.dp)
+        )
+    }
 }
 
+// ------------------- Made for You -------------------
 
 @Composable
-fun MadeForYouHeader(title: String ,message : String,modifier: Modifier = Modifier) {
-
+fun MadeForYouHeader(title: String, message: String, modifier: Modifier = Modifier) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
@@ -481,7 +406,7 @@ fun MadeForYouHeader(title: String ,message : String,modifier: Modifier = Modifi
                 .clip(RoundedCornerShape(5.dp))
         )
         Spacer(modifier = Modifier.width(10.dp))
-        Column{
+        Column {
             Text(
                 text = title,
                 style = MaterialTheme.typography.headlineSmall,
@@ -492,14 +417,14 @@ fun MadeForYouHeader(title: String ,message : String,modifier: Modifier = Modifi
             Text(
                 text = message,
                 fontWeight = FontWeight.Medium,
-                color = Color.DarkGray,
-                modifier = Modifier
+                color = Color.DarkGray
             )
         }
     }
 }
+
 @Composable
-fun MadeForYouCard(){
+fun MadeForYouCard() {
     Column(
         verticalArrangement = Arrangement.SpaceBetween,
         modifier = Modifier
@@ -527,76 +452,44 @@ fun MadeForYouCard(){
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(8.dp)
-                ){
-
-                    Row(
-                        horizontalArrangement = Arrangement.SpaceEvenly,
-                        verticalAlignment = Alignment.CenterVertically
-                    ){
+                    modifier = Modifier.fillMaxWidth().padding(8.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
                             imageVector = Icons.Default.MusicNote,
                             contentDescription = null,
-                            modifier = Modifier
-                                .size(14.dp)
+                            modifier = Modifier.size(14.dp)
                         )
-                        Text(
-                            "Grind Hard",
-                            fontWeight = FontWeight.Bold
-                        )
+                        Text("Grind Hard", fontWeight = FontWeight.Bold)
                     }
                     Icon(
                         imageVector = Icons.Outlined.AddCircleOutline,
                         contentDescription = null,
                         tint = Color.Gray
                     )
-
                 }
-
-                Column (
-                    modifier = Modifier
-                        .padding(8.dp,1.dp)
-                ){
-                    Text(
-                        text = "Songs : 20 ",
-                        color = Color.Gray
-                    )
-                    Text(
-                        text = "J Cole, Imagine ",
-                        color = Color.LightGray
-                    )
+                Column(modifier = Modifier.padding(8.dp, 1.dp)) {
+                    Text(text = "Songs : 20 ", color = Color.Gray)
+                    Text(text = "J Cole, Imagine ", color = Color.LightGray)
                 }
             }
-
         }
         Row(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(10.dp, 1.dp)
+            modifier = Modifier.fillMaxWidth().padding(10.dp, 1.dp)
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically
-            ){
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 CircularProgressIndicator(
                     trackColor = Color.DarkGray,
                     color = Color(0x9E07F6F6),
-                    modifier = Modifier
-                        .size(20.dp)
+                    modifier = Modifier.size(20.dp)
                 )
                 IconButton(onClick = {}) {
-                    Icon(
-                        Icons.Default.Speaker,
-                        null
-                    )
+                    Icon(Icons.Default.Speaker, contentDescription = null)
                 }
             }
-            IconButton(
-                onClick = {}
-            ) {
+            IconButton(onClick = {}) {
                 Icon(
                     imageVector = Icons.Default.PlayArrow,
                     contentDescription = null,
@@ -605,7 +498,6 @@ fun MadeForYouCard(){
                         .padding(6.dp)
                         .clip(CircleShape)
                         .background(Color(0x9E07F6F6))
-
                 )
             }
         }
