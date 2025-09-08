@@ -97,7 +97,10 @@ fun Explore(dataViewModel: DataViewModel,navController: NavController) {
 
             item {
                 SectionHeader("Artists")
-                AlbumCarousel(artists)
+                AlbumCarousel(artists){ it->
+                    navController.navigate("songlist/${it}")
+                    dataViewModel._selectedPlaylist.value = it
+                }
             }
             item {
                 SectionHeader("Must try")

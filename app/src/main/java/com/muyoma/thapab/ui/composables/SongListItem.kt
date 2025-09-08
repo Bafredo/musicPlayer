@@ -26,13 +26,16 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import coil.compose.rememberAsyncImagePainter
+import coil.request.ImageRequest
 import com.muyoma.thapab.R
 import com.muyoma.thapab.models.Song
 import java.nio.file.WatchEvent
@@ -64,10 +67,9 @@ fun SongListItem(
             }
             .padding(8.dp, 1.dp)
     ) {
-        Image(
-            painter = if(song.coverResId != null)rememberAsyncImagePainter(model = song.coverResId)
-            else painterResource(R.drawable.bg),
-            contentDescription = null,
+        AsyncImage(
+            model = song.albumArtUri ?: song.coverResId,
+            contentDescription = "Album Art for ${song.title}",
             contentScale = ContentScale.FillBounds,
             modifier = Modifier
                 .padding(0.dp, 7.dp)

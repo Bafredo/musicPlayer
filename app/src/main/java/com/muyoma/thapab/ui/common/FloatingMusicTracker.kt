@@ -43,6 +43,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import coil.compose.rememberAsyncImagePainter
 import com.muyoma.thapab.models.Song
 import com.muyoma.thapab.service.PlayerController
@@ -97,9 +98,8 @@ fun FloatingMusicTracker(
             horizontalArrangement = Arrangement.SpaceAround,
             modifier = Modifier.weight(8f).fillMaxHeight()
         ) {
-            Image(
-                painter = if(song.coverResId != null) rememberAsyncImagePainter(model = song.coverResId)
-                else painterResource(R.drawable.bg),
+            AsyncImage(
+                model = song.albumArtUri ?: song.coverResId,
                 contentDescription = song.title,
                 modifier = Modifier
                     .width(55.dp)

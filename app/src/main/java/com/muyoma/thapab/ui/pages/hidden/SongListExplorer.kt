@@ -34,7 +34,7 @@ import com.muyoma.thapab.viewmodel.DataViewModel
 
 @SuppressLint("ConfigurationScreenWidthHeight")
 @Composable
-fun PlayListExplorer(dataViewModel: DataViewModel, navController: NavController, songs: List<Song>) {
+fun SongListExplorer(dataViewModel: DataViewModel, navController: NavController, songs: List<Song>) {
     val displayImage = remember { mutableIntStateOf(0) }
 
 

@@ -1,7 +1,9 @@
 package com.muyoma.thapab.viewmodel
 
+import android.annotation.SuppressLint
 import android.app.Application
 import android.app.DownloadManager
+import android.content.ContentUris
 import android.content.Context
 import android.content.Intent
 import android.net.Uri // Import Uri
@@ -34,6 +36,7 @@ import com.muyoma.thapab.network.ApiService
 import com.muyoma.thapab.network.ApiServiceImpl
 import com.muyoma.thapab.network.models.YoutubeVideo // Import your Ktor models
 import java.net.URLEncoder
+import androidx.core.net.toUri
 
 class DataViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -207,58 +210,111 @@ class DataViewModel(application: Application) : AndroidViewModel(application) {
         _repeatSong.value = !_repeatSong.value
     }
 
+    @SuppressLint("Recycle")
     fun getAllSongs(context: Context) {
-        val songList = mutableListOf<Song>()
-        val collection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
-        } else {
-            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
-        }
-
-        val projection = arrayOf(
-            MediaStore.Audio.Media._ID,
-            MediaStore.Audio.Media.TITLE,
-            MediaStore.Audio.Media.ARTIST,
-            MediaStore.Audio.Media.DURATION,
-            MediaStore.Audio.Media.DATA
-        )
-
-        val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0"
-        val sortOrder = "${MediaStore.Audio.Media.TITLE} ASC"
-
-        context.contentResolver.query(
-            collection,
-            projection,
-            selection,
-            null,
-            sortOrder
-        )?.use { cursor ->
-            val idCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
-            val titleCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
-            val artistCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
-            val dataCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATA)
-
-
-            while (cursor.moveToNext()) {
-                val song = Song(
-                    id = cursor.getLong(idCol).toString(),
-                    title = cursor.getString(titleCol),
-                    artist = cursor.getString(artistCol),
-                    data = cursor.getString(dataCol)
-                )
-                songList += song
+        viewModelScope.launch(Dispatchers.IO) {
+            val songList = mutableListOf<Song>()
+            val collection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
+            } else {
+                MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
             }
-        }
-        viewModelScope.launch(Dispatchers.Main) {
-            _songs.value = songList
-            if (_currentSong.value == null && songList.isNotEmpty()) {
-                _currentSong.value = songList.first()
+
+            val projection = arrayOf(
+                MediaStore.Audio.Media._ID,
+                MediaStore.Audio.Media.TITLE,
+                MediaStore.Audio.Media.ARTIST,
+                MediaStore.Audio.Media.DURATION,
+                MediaStore.Audio.Media.ALBUM_ID
+            )
+
+            val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0"
+            val sortOrder = "${MediaStore.Audio.Media.TITLE} ASC"
+
+            context.contentResolver.query(
+                collection,
+                projection,
+                selection,
+                null,
+                sortOrder
+            )?.use { cursor ->
+                val idCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
+                val titleCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
+                val artistCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
+                val albumIdCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM_ID)
+
+                while (cursor.moveToNext()) {
+                    val id = cursor.getLong(idCol)
+                    val title = cursor.getString(titleCol) ?: "Unknown"
+                    val artist = cursor.getString(artistCol) ?: "Unknown"
+                    val albumId = cursor.getLong(albumIdCol)
+
+                    // ✅ Build proper content:// URI
+                    val contentUri = ContentUris.withAppendedId(
+                        MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id
+                    )
+
+                    // ✅ Resolve album art (with fallback)
+                    val albumArtUri = resolveAlbumArt(context, contentUri, albumId)
+
+                    val song = Song(
+                        id = id.toString(),
+                        title = title,
+                        artist = artist,
+                        data = contentUri.toString(), // store content:// URI instead of file path
+                        albumArtUri = albumArtUri
+                    )
+                    songList += song
+                }
             }
-            recommended = songList.take(5)
-            mostPopular = songList.takeLast(5)
-            mostPlayed = songList.shuffled().take(5)
+
+            withContext(Dispatchers.Main) {
+                _songs.value = songList
+                if (_currentSong.value == null && songList.isNotEmpty()) {
+                    _currentSong.value = songList.first()
+                }
+                recommended = songList.take(5)
+                mostPopular = songList.takeLast(5)
+                mostPlayed = songList.shuffled().take(5)
+            }
         }
     }
+
+
+    fun resolveAlbumArt(context: Context, songUri: Uri, albumId: Long): Uri? {
+        // MediaStore lookup
+        context.contentResolver.query(
+            MediaStore.Audio.Albums.EXTERNAL_CONTENT_URI,
+            arrayOf(MediaStore.Audio.Albums.ALBUM_ART),
+            "${MediaStore.Audio.Albums._ID}=?",
+            arrayOf(albumId.toString()),
+            null
+        )?.use { cursor ->
+            val artCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Albums.ALBUM_ART)
+            if (cursor.moveToFirst()) {
+                cursor.getString(artCol)?.let { path ->
+                    return Uri.parse("file://$path")
+                }
+            }
+        }
+
+        // Fallback: Embedded art
+        val retriever = android.media.MediaMetadataRetriever()
+        return try {
+            retriever.setDataSource(context, songUri)
+            retriever.embeddedPicture?.let { bytes ->
+                val file = java.io.File(context.cacheDir, "${songUri.lastPathSegment}.jpg")
+                java.io.FileOutputStream(file).use { out -> out.write(bytes) }
+                Uri.fromFile(file)
+            }
+        } catch (e: Exception) {
+            Log.w("DataViewModel", "No embedded album art for $songUri", e)
+            null
+        } finally {
+            retriever.release()
+        }
+    }
+
 
 
     // MODIFIED: playSong to handle local files or streaming from your backend
@@ -397,6 +453,9 @@ class DataViewModel(application: Application) : AndroidViewModel(application) {
 
     fun getSongByTitle(title: String): Song? {
         return songs.value.find { it.title == title }
+    }
+    fun getSongsByArtist(title : String) : List<Song>{
+        return songs.value.filter { it.artist == title }
     }
 
     fun cleanUpInvalidSongsInPlaylist(playlistName: String, allSongs: List<Song>) {

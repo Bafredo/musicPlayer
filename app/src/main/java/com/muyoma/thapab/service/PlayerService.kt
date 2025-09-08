@@ -5,11 +5,15 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.ImageDecoder
+import android.net.Uri
 import android.os.Build
 import android.os.IBinder
+import android.provider.MediaStore
 import android.support.v4.media.MediaMetadataCompat
 import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
@@ -225,6 +229,26 @@ class PlayerService : Service() {
         return buildNotification(currentPosition, duration)
     }
 
+    fun loadBitmapFromUri(context: Context, uri: Uri?): Bitmap? {
+        if (uri == null) return null
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                // ✅ Safer modern API
+                val source = ImageDecoder.createSource(context.contentResolver, uri)
+                ImageDecoder.decodeBitmap(source) { decoder, _, _ ->
+                    decoder.isMutableRequired = true
+                }
+            } else {
+                // ✅ Legacy API
+                MediaStore.Images.Media.getBitmap(context.contentResolver, uri)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+
+
     private fun buildNotification(currentPosition: Int, duration: Int): Notification {
         val channelId = "music_channel"
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -264,7 +288,7 @@ class PlayerService : Service() {
         // --- END: MODIFICATIONS FOR OPENING PLAYER PAGE ---
 
 
-        val largeIconBitmap = albumArtBitmap ?: BitmapFactory.decodeResource(resources, R.drawable.bg4)
+        val largeIconBitmap = loadBitmapFromUri(application.baseContext,currentSong?.albumArtUri) ?: BitmapFactory.decodeResource(resources, R.drawable.bg4)
 
         val progress = currentPosition
 
@@ -321,17 +345,27 @@ class PlayerService : Service() {
     }
 
     private fun updateMediaSessionMetadata(song: Song) {
-        val albumArt = albumArtBitmap ?: getSquareThumbnail(BitmapFactory.decodeResource(resources, R.drawable.bg4))
+        // Try to load bitmap from the song’s albumArtUri
+        val albumArt = loadBitmapFromUri(this, song.albumArtUri)
+            ?: albumArtBitmap // fallback to cached default
 
         val metadata = MediaMetadataCompat.Builder()
             .putString(MediaMetadataCompat.METADATA_KEY_TITLE, song.title)
             .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, song.artist)
-            .putBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART, albumArt)
-            .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, PlayerController.mediaPlayer?.duration?.toLong() ?: 0L)
+            .putLong(
+                MediaMetadataCompat.METADATA_KEY_DURATION,
+                PlayerController.mediaPlayer?.duration?.toLong() ?: 0L
+            )
+            .apply {
+                albumArt?.let {
+                    putBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART, it)
+                }
+            }
             .build()
 
         mediaSession.setMetadata(metadata)
     }
+
 
     override fun onDestroy() {
         mediaSession.release()
@@ -350,8 +384,24 @@ class PlayerService : Service() {
     }
 
     fun getSquareThumbnail(bitmap: Bitmap, size: Int = 128): Bitmap {
-        return Bitmap.createScaledBitmap(bitmap, size, size, true)
+        val width = bitmap.width
+        val height = bitmap.height
+
+        // Find the shorter side
+        val newEdge = minOf(width, height)
+
+        // Calculate crop coordinates to center
+        val xOffset = (width - newEdge) / 2
+        val yOffset = (height - newEdge) / 2
+
+        // Crop to a centered square
+        val square = Bitmap.createBitmap(bitmap, xOffset, yOffset, newEdge, newEdge)
+
+        // Scale to the requested size (e.g., 256x256 for notifications)
+        return Bitmap.createScaledBitmap(square, size, size, true)
     }
+
+
 
 
     companion object {

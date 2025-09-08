@@ -57,12 +57,15 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import coil.compose.rememberAsyncImagePainter
+import coil.request.ImageRequest
 import com.muyoma.thapab.R
 import com.muyoma.thapab.models.Playlist
 import com.muyoma.thapab.models.Song
@@ -176,17 +179,27 @@ fun SongCarousel(songs: List<Song>) {
 }
 
 @Composable
-fun AlbumCarousel(songs: List<Song>) {
+fun AlbumCarousel(
+    songs: List<Song>,
+    playArtist: (String) -> Unit
+) {
+    // ✅ keep only songs that have album art
+    val songsWithArt = songs.filter { it.albumArtUri != null }
+
     LazyRow(
         horizontalArrangement = Arrangement.spacedBy(16.dp),
-        modifier = Modifier
-            .padding(10.dp,1.dp)
-        ) {
-        items(songs.size) { index ->
-            AlbumCard(song = songs[index])
+        modifier = Modifier.padding(10.dp, 1.dp)
+    ) {
+        items(songsWithArt.size) { index ->
+            val song = songsWithArt[index]
+            AlbumCard(song = song) {
+                // ✅ Always pass the first one with art
+                playArtist(songsWithArt.first().artist)
+            }
         }
     }
 }
+
 
 @Composable
 fun MostPlayedCarousel(songs: List<Song>, currentSong: Song?, play: (Song,List<Song>) -> Unit) {
@@ -244,9 +257,8 @@ fun SongCard(song: Song) {
             modifier = Modifier.padding(8.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Image(
-                painter = if(song.coverResId != null)rememberAsyncImagePainter(model = song.coverResId)
-                else painterResource(R.drawable.bg),
+            AsyncImage(
+                model = song.albumArtUri ?: song.coverResId,
                 contentDescription = song.title,
                 modifier = Modifier
                     .height(140.dp)
@@ -266,7 +278,8 @@ fun SongCard(song: Song) {
             Text(
                 text = song.artist,
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                maxLines = 1
             )
         }
     }
@@ -286,9 +299,14 @@ fun MostPlayedCard(song: Song, isPlaying: Boolean, play: ()->Unit) {
                 .padding(0.dp,0.dp,0.dp,8.dp)
             ,
         ) {
-            Image(
-                painter = rememberAsyncImagePainter(model = song.coverResId),
-                contentDescription = song.title,
+            AsyncImage(
+                model = ImageRequest.Builder(LocalContext.current)
+                    .data(song.albumArtUri) // Uri from MediaStore
+                    .crossfade(true)
+                    .build(),
+                contentDescription = "Album Art for ${song.title}",
+                placeholder = painterResource(id = song.coverResId),
+                error = painterResource(id = song.coverResId),
                 modifier = Modifier
                     .size(150.dp)
                     .fillMaxWidth()
@@ -322,7 +340,10 @@ fun MostPlayedCard(song: Song, isPlaying: Boolean, play: ()->Unit) {
                     Text(
                         text = song.artist,
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                        modifier = Modifier
+                            .width(80.dp),
+                        maxLines = 1
                     )
                 }
                 Icon(
@@ -339,11 +360,10 @@ fun MostPlayedCard(song: Song, isPlaying: Boolean, play: ()->Unit) {
     }
 }
 @Composable
-fun AlbumCard(song: Song) {
+fun AlbumCard(song: Song,playArtist : (String)->Unit) {
     Card(
         modifier = Modifier
-            .width(100.dp)
-            .clickable { /* TODO: handle click */ },
+            .width(100.dp),
         colors = CardDefaults.cardColors(containerColor = Color.Transparent),
     ) {
         Box(
@@ -351,15 +371,15 @@ fun AlbumCard(song: Song) {
                 .padding(0.dp,0.dp,0.dp,8.dp)
 
         ) {
-            Image(
-                painter = if(song.coverResId != null)rememberAsyncImagePainter(model = song.coverResId)
-                else painterResource(R.drawable.bg),
+            AsyncImage(
+                model = song.albumArtUri ?: song.coverResId,
                 contentDescription = song.title,
                 modifier = Modifier
                     .height(100.dp)
                     .fillMaxWidth()
                     .shadow(20.dp, CircleShape, true, Color.White)
                     .clip(CircleShape)
+                    .clickable{playArtist(song.artist)}
                 ,
                 contentScale = ContentScale.Crop
             )
@@ -389,7 +409,8 @@ fun AlbumCard(song: Song) {
                 text = song.artist,
                 fontWeight = FontWeight.Light,
                 fontSize = 14.sp,
-                color = Color.LightGray
+                color = Color.LightGray,
+                maxLines = 1
             )
         }
     }

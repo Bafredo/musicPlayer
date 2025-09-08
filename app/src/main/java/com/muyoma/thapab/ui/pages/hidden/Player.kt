@@ -43,6 +43,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import coil.compose.AsyncImage
 import coil.compose.rememberAsyncImagePainter
 import com.muyoma.thapab.R
 import com.muyoma.thapab.models.Song
@@ -124,9 +125,8 @@ fun Player(
             shape = RoundedCornerShape(20.dp),
             elevation = androidx.compose.material3.CardDefaults.cardElevation(10.dp)
         ) {
-            Image(
-                painter = if(displaySong.coverResId != R.drawable.bg) rememberAsyncImagePainter(model = displaySong.coverResId)
-                else painterResource(R.drawable.bg),
+            AsyncImage(
+                model = s.albumArtUri ?: s.coverResId,
                 contentDescription = "Album Art for ${displaySong.title}",
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()

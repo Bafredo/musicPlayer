@@ -38,6 +38,7 @@ import com.muyoma.thapab.ui.composables.PlaylistBottomSheet
 import com.muyoma.thapab.ui.pages.auth.Auth
 import com.muyoma.thapab.ui.pages.hidden.PlayListExplorer
 import com.muyoma.thapab.ui.pages.hidden.Player
+import com.muyoma.thapab.ui.pages.hidden.SongListExplorer
 import com.muyoma.thapab.ui.pages.visible.*
 import com.muyoma.thapab.ui.theme.AppTheme
 import com.muyoma.thapab.viewmodel.AuthViewModel
@@ -202,6 +203,15 @@ class MainActivity : ComponentActivity() {
                                     val list = listName?.let { dataViewModel.getSongsFromPlaylist(it) }
                                     list?.let {
                                         PlayListExplorer(dataViewModel, navController,it)
+                                    }
+                                }
+                                composable("songlist/{$PLAYER_ARG_SONG_ID}",
+                                    arguments = listOf(navArgument(PLAYER_ARG_SONG_ID) { type = NavType.StringType })
+                                ) { entry ->
+                                    val artistName = entry.arguments?.getString(PLAYER_ARG_SONG_ID)
+                                    val list = artistName?.let { dataViewModel.getSongsByArtist(it) }
+                                    list?.let {
+                                        SongListExplorer(dataViewModel, navController,it)
                                     }
                                 }
                                 composable(
