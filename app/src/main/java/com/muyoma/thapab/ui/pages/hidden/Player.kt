@@ -3,6 +3,7 @@ package com.muyoma.thapab.ui.pages.hidden
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -18,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
@@ -29,6 +31,7 @@ import com.muyoma.thapab.models.Song
 import com.muyoma.thapab.service.PlayerController
 import com.muyoma.thapab.ui.common.MusicProgressTracker
 import com.muyoma.thapab.viewmodel.DataViewModel
+import kotlin.math.abs
 
 @Composable
 fun Player(
@@ -69,6 +72,11 @@ fun Player(
         )
     }
 
+    // 🔹 Swipe gesture state
+    var dragOffset by remember { mutableStateOf(0f) }
+    val swipeThreshold = 150f // Minimum swipe distance
+    val velocityThreshold = 400f // Minimum swipe velocity
+
     Column(
         verticalArrangement = Arrangement.SpaceBetween,
         modifier = frameModifier
@@ -98,7 +106,7 @@ fun Player(
             Spacer(Modifier.width(10.dp))
         }
 
-        // 🔹 Album Artwork
+        // 🔹 Album Artwork with Swipe Gestures
         Card(
             modifier = Modifier
                 .padding(20.dp)
@@ -113,7 +121,54 @@ fun Player(
                 contentScale = ContentScale.Crop,
                 modifier = imageModifier
                     .fillMaxSize()
+                    .pointerInput(displaySong.id) { // Reset gesture detection when song changes
+                        var startTime = 0L
+                        var startX = 0f
+                        var totalDragX = 0f
 
+                        detectDragGestures(
+                            onDragStart = { offset ->
+                                startTime = System.currentTimeMillis()
+                                startX = offset.x
+                                totalDragX = 0f
+                                dragOffset = 0f
+                            },
+                            onDragEnd = {
+                                val endTime = System.currentTimeMillis()
+                                val duration = endTime - startTime
+                                val velocity = if (duration > 0) {
+                                    totalDragX / (duration / 1000f)
+                                } else 0f
+
+                                // Determine if it's a valid swipe
+                                val isValidSwipe = abs(totalDragX) > swipeThreshold ||
+                                        abs(velocity) > velocityThreshold
+
+                                if (isValidSwipe) {
+                                    when {
+                                        totalDragX > 0 -> {
+                                            // Swipe right - Previous song
+                                            dataViewModel.playPrev(context)
+                                        }
+                                        totalDragX < 0 -> {
+                                            // Swipe left - Next song
+                                            dataViewModel.playNext(context)
+                                        }
+                                    }
+                                }
+
+                                // Reset drag state
+                                dragOffset = 0f
+                                totalDragX = 0f
+                            }
+                        ) { _, dragAmount ->
+                            totalDragX += dragAmount.x
+                            dragOffset += dragAmount.x
+
+                            // Optional: Limit the visual drag to prevent excessive movement
+                            dragOffset = dragOffset.coerceIn(-200f, 200f)
+                        }
+                    }
             )
         }
 
