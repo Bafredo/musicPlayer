@@ -132,10 +132,12 @@ fun PlayListDialog(
 // ------------------- Carousels -------------------
 
 @Composable
-fun SongCarousel(songs: List<Song>) {
+fun SongCarousel(songs: List<Song>,play: (Song) -> Unit) {
     LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         itemsIndexed(songs, key = { _, song -> song.id }) { _, song ->
-            SongCard(song = song)
+            SongCard(song = song){
+                play(song)
+            }
         }
     }
 }
@@ -153,7 +155,7 @@ fun AlbumCarousel(
     ) {
         itemsIndexed(songsWithArt, key = { _, song -> song.id }) { _, song ->
             AlbumCard(song = song) {
-                playArtist(songsWithArt.first().artist)
+                playArtist(song.artist)
             }
         }
     }
@@ -208,11 +210,11 @@ fun PlayLister(
 // ------------------- Cards -------------------
 
 @Composable
-fun SongCard(song: Song) {
+fun SongCard(song: Song,play : ()->Unit) {
     Card(
         modifier = Modifier
             .width(160.dp)
-            .clickable { /* TODO: handle click */ },
+            .clickable { play() },
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E)),
         elevation = CardDefaults.cardElevation(6.dp)

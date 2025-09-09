@@ -12,6 +12,14 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.RequiresApi
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.BoundsTransform
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedTransitionLayout
+import androidx.compose.animation.core.ArcMode
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.keyframes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -61,7 +69,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var downloadReceiver: BroadcastReceiver
 
 
-    @OptIn(ExperimentalMaterial3Api::class)
+    @OptIn(ExperimentalMaterial3Api::class, ExperimentalSharedTransitionApi::class)
     @RequiresApi(Build.VERSION_CODES.S)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -120,6 +128,7 @@ class MainActivity : ComponentActivity() {
                 }
 
                 val context = LocalContext.current
+                lateinit var aniScope : AnimatedVisibilityScope
                 val permissionLauncher = rememberLauncherForActivityResult(
                     contract = ActivityResultContracts.RequestPermission()
                 ) { isGranted ->
@@ -178,6 +187,15 @@ class MainActivity : ComponentActivity() {
                 }
                 // --- END: Handle Intent from Notification ---
 
+                
+                val textBoundsTransform = BoundsTransform { initialBounds, targetBounds ->
+                    keyframes {
+                        durationMillis = 2000
+                        initialBounds at 0 using ArcMode.ArcBelow using FastOutSlowInEasing
+                        targetBounds at 2000
+                    }
+                }
+
 
                 Scaffold(
                     modifier = Modifier
@@ -185,131 +203,187 @@ class MainActivity : ComponentActivity() {
                         .background(Color.Black)
                 ) { innerPadding ->
                     Column(modifier = Modifier.padding(innerPadding)) {
-                        Box(modifier = Modifier.fillMaxSize()) {
-                            NavHost(
-                                navController = navController,
-                                startDestination = "explore",
-                                modifier = Modifier.background(MaterialTheme.colorScheme.background)
-                            ) {
+                        SharedTransitionLayout {
+                            Box(modifier = Modifier.fillMaxSize()) {
+                                NavHost(
+                                    navController = navController,
+                                    startDestination = "explore",
+                                    modifier = Modifier.background(MaterialTheme.colorScheme.background)
+                                ) {
 //                                composable("auth") { Auth(authViewModel) }
-                                composable("explore") { Explore(dataViewModel, navController) }
-                                composable("liked") { Liked(dataViewModel, navController) }
-                                composable("local") { Local(dataViewModel, navController) }
-                                composable("search") { Search(dataViewModel) }
-                                composable("playlist/{$PLAYER_ARG_SONG_ID}",
-                                    arguments = listOf(navArgument(PLAYER_ARG_SONG_ID) { type = NavType.StringType })
-                                ) { entry ->
-                                    val listName = entry.arguments?.getString(PLAYER_ARG_SONG_ID)
-                                    val list = listName?.let { dataViewModel.getSongsFromPlaylist(it) }
-                                    list?.let {
-                                        PlayListExplorer(dataViewModel, navController,it)
-                                    }
-                                }
-                                composable("songlist/{$PLAYER_ARG_SONG_ID}",
-                                    arguments = listOf(navArgument(PLAYER_ARG_SONG_ID) { type = NavType.StringType })
-                                ) { entry ->
-                                    val artistName = entry.arguments?.getString(PLAYER_ARG_SONG_ID)
-                                    val list = artistName?.let { dataViewModel.getSongsByArtist(it) }
-                                    list?.let {
-                                        SongListExplorer(dataViewModel, navController,it)
-                                    }
-                                }
-                                composable(
-                                    "player/{$PLAYER_ARG_SONG_ID}",
-                                    arguments = listOf(navArgument(PLAYER_ARG_SONG_ID) { type = NavType.StringType })
-                                ) { entry ->
-                                    val songTitle = entry.arguments?.getString(PLAYER_ARG_SONG_ID)
-                                    val song = songTitle?.let { dataViewModel.getSongByTitle(it) }
-                                    song?.let {
-                                        Player(s = it, dataViewModel = dataViewModel,navController = navController)
-                                    }
-                                }
-                            }
-
-                            if (showBars) {
-                                if (currentRoute == "explore" || currentRoute == "local") {
-                                    TopBar()
-                                }
-                            }
-
-                            if (showBars) {
-                                Column(modifier = Modifier.align(Alignment.BottomCenter)) {
-                                    if (showPlayer) {
-                                        val currentPlayingSong by dataViewModel.currentSong.collectAsState()
-                                        currentPlayingSong?.let { song ->
-                                            FloatingMusicTracker(
-                                                song = song,
-                                                isLiked = liked,
-                                                pause = { dataViewModel.pauseSong(context) },
-                                                play = { dataViewModel.unpauseSong(context) },
-                                                liked = {
-                                                    if (dataViewModel.isSongLiked(it))
-                                                        dataViewModel.unlikeSong(it)
-                                                    else
-                                                        dataViewModel.likeSong(it)
-                                                },
-                                                clicked = {
-                                                    navController.navigate("player/${it.title}")                                                }
-                                            )
+                                    composable("explore") { Explore(dataViewModel, navController) }
+                                    composable("liked") { Liked(dataViewModel, navController) }
+                                    composable("local") { Local(dataViewModel, navController) }
+                                    composable("search") { Search(dataViewModel) }
+                                    composable(
+                                        "playlist/{$PLAYER_ARG_SONG_ID}",
+                                        arguments = listOf(navArgument(PLAYER_ARG_SONG_ID) {
+                                            type = NavType.StringType
+                                        })
+                                    ) { entry ->
+                                        val listName =
+                                            entry.arguments?.getString(PLAYER_ARG_SONG_ID)
+                                        val list =
+                                            listName?.let { dataViewModel.getSongsFromPlaylist(it) }
+                                        list?.let {
+                                            PlayListExplorer(dataViewModel, navController, it)
                                         }
                                     }
+                                    composable(
+                                        "songlist/{$PLAYER_ARG_SONG_ID}",
+                                        arguments = listOf(navArgument(PLAYER_ARG_SONG_ID) {
+                                            type = NavType.StringType
+                                        })
+                                    ) { entry ->
+                                        val artistName =
+                                            entry.arguments?.getString(PLAYER_ARG_SONG_ID)
+                                        val list =
+                                            artistName?.let { dataViewModel.getSongsByArtist(it) }
+                                        list?.let {
+                                            SongListExplorer(dataViewModel, navController, it)
+                                        }
+                                    }
+                                    composable(
+                                        "player/{$PLAYER_ARG_SONG_ID}",
+                                        arguments = listOf(navArgument(PLAYER_ARG_SONG_ID) {
+                                            type = NavType.StringType
+                                        })
+                                    ) { entry ->
+                                        val songTitle =
+                                            entry.arguments?.getString(PLAYER_ARG_SONG_ID)
+                                        val song =
+                                            songTitle?.let { dataViewModel.getSongByTitle(it) }
+                                        song?.let {
+                                            Player(
+                                                s = it,
+                                                dataViewModel = dataViewModel,
+                                                navController = navController,
+                                                imageModifier = Modifier.sharedElement(
+                                                    sharedContentState = rememberSharedContentState(key = "song_${it.id}"),
+                                                    animatedVisibilityScope = this // 👈 fix here
+                                                ),
+                                                textModifier = Modifier.sharedElement(
+                                                    sharedContentState = rememberSharedContentState(key = "text_${it.id}"),
+                                                    animatedVisibilityScope = this ,
+                                                    boundsTransform = textBoundsTransform
 
-                                    BottomNavigationBar(
-                                        modifier = Modifier
-                                            .background(
-                                                brush = Brush.verticalGradient(
-                                                    colors = listOf(
-                                                        Color.Black,
-                                                        Color.Black,
-                                                        Color.Transparent
-                                                    ),
-                                                    startY = Float.POSITIVE_INFINITY,
-                                                    endY = 0f
+                                                ),
+                                                frameModifier = Modifier.sharedBounds(
+                                                    sharedContentState = rememberSharedContentState(key = "player_${it.id}"),
+                                                    animatedVisibilityScope = this,
+                                                    boundsTransform = textBoundsTransform
+
                                                 )
                                             )
-                                            .padding(horizontal = 18.dp),
-                                        navController = navController
-                                    )
-                                }
-                            }
-                        }
-                        if (dataViewModel.showPlayListSheet.collectAsState().value) {
-                            ModalBottomSheet(
-                                onDismissRequest = { dataViewModel.togglePlaylistSheet(false) },
-                                containerColor = Color(0XBF000000)
-                            ) {
-                                PlaylistBottomSheet(
-                                    playlists = dataViewModel.getAllPlaylists(),
-                                    onAddPlaylist = {
-                                        dataViewModel.togglePlaylistSheet(false)
-                                        showCreatePlaylist = true
-                                    },
-                                    onDismiss = { dataViewModel.togglePlaylistSheet(false) },
-                                    onSelect = {
-                                        val song = dataViewModel.selectedSong.value
-                                        if(song != null) {
-                                            dataViewModel.addSongToPlaylist(it, song)
-                                            dataViewModel._showPlayListSheet.value = false
                                         }
-                                    },
-                                )
-                            }
-
-                        }
-                        if(showCreatePlaylist){
-                            PlayListDialog(
-                                "Create Playlist",
-                                onDismiss = {showCreatePlaylist = false}
-                            ) { name ->
-                                if(dataViewModel.selectedSong.value != null){
-                                    dataViewModel.createPlaylist(name)
-                                    dataViewModel.addSongToPlaylist(
-                                        name,
-                                        dataViewModel.selectedSong.value!!
-                                    )
+                                    }
                                 }
-                                showCreatePlaylist = false
-                                dataViewModel._showPlayListSheet.value = false
+
+
+                                if (showBars) {
+                                    if (currentRoute == "explore" || currentRoute == "local") {
+                                        TopBar()
+                                    }
+                                }
+
+                                if (showBars) {
+                                    Column(modifier = Modifier.align(Alignment.BottomCenter)) {
+                                        AnimatedVisibility(visible = showPlayer) {
+                                            val currentPlayingSong by dataViewModel.currentSong.collectAsState()
+                                            currentPlayingSong?.let { song ->
+                                                FloatingMusicTracker(
+                                                    song = song,
+                                                    isLiked = liked,
+                                                    pause = { dataViewModel.pauseSong(context) },
+                                                    play = { dataViewModel.unpauseSong(context) },
+                                                    liked = {
+                                                        if (dataViewModel.isSongLiked(it))
+                                                            dataViewModel.unlikeSong(it)
+                                                        else
+                                                            dataViewModel.likeSong(it)
+                                                    },
+                                                    clicked = {
+                                                        navController.navigate("player/${it.title}")
+                                                    },
+                                                    imagemodifier = Modifier.sharedElement(
+                                                        sharedContentState = rememberSharedContentState("song_${song.id}"),
+                                                        animatedVisibilityScope = this,
+
+                                                    ),
+                                                    textmodifier = Modifier.sharedElement(
+                                                        sharedContentState = rememberSharedContentState("text_${song.id}"),
+                                                        animatedVisibilityScope = this,
+                                                        boundsTransform = textBoundsTransform
+
+                                                    ),
+                                                    frameModifier = Modifier.sharedBounds(
+                                                        sharedContentState = rememberSharedContentState(key = "player_${song.id}"),
+                                                        animatedVisibilityScope = this,
+                                                        boundsTransform = textBoundsTransform
+                                                    )
+                                                )
+                                            }
+                                        }
+
+                                        BottomNavigationBar(
+                                            modifier = Modifier
+                                                .background(
+                                                    brush = Brush.verticalGradient(
+                                                        colors = listOf(
+                                                            Color.Black,
+                                                            Color.Black,
+                                                            Color.Transparent
+                                                        ),
+                                                        startY = Float.POSITIVE_INFINITY,
+                                                        endY = 0f
+                                                    )
+                                                )
+                                                .padding(horizontal = 18.dp),
+                                            navController = navController
+                                        )
+                                    }
+                                }
+
+
+                                if (dataViewModel.showPlayListSheet.collectAsState().value) {
+                                    ModalBottomSheet(
+                                        onDismissRequest = { dataViewModel.togglePlaylistSheet(false) },
+                                        containerColor = Color(0XBF000000)
+                                    ) {
+                                        PlaylistBottomSheet(
+                                            playlists = dataViewModel.getAllPlaylists(),
+                                            onAddPlaylist = {
+                                                dataViewModel.togglePlaylistSheet(false)
+                                                showCreatePlaylist = true
+                                            },
+                                            onDismiss = { dataViewModel.togglePlaylistSheet(false) },
+                                            onSelect = {
+                                                val song = dataViewModel.selectedSong.value
+                                                if (song != null) {
+                                                    dataViewModel.addSongToPlaylist(it, song)
+                                                    dataViewModel._showPlayListSheet.value = false
+                                                }
+                                            },
+                                        )
+                                    }
+
+                                }
+                                if (showCreatePlaylist) {
+                                    PlayListDialog(
+                                        "Create Playlist",
+                                        onDismiss = { showCreatePlaylist = false }
+                                    ) { name ->
+                                        if (dataViewModel.selectedSong.value != null) {
+                                            dataViewModel.createPlaylist(name)
+                                            dataViewModel.addSongToPlaylist(
+                                                name,
+                                                dataViewModel.selectedSong.value!!
+                                            )
+                                        }
+                                        showCreatePlaylist = false
+                                        dataViewModel._showPlayListSheet.value = false
+                                    }
+                                }
                             }
                         }
                     }

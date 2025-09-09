@@ -1,5 +1,6 @@
 package com.muyoma.thapab.ui.pages.hidden
 
+import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -33,7 +34,10 @@ import com.muyoma.thapab.viewmodel.DataViewModel
 fun Player(
     s: Song,
     dataViewModel: DataViewModel,
-    navController: NavController
+    navController: NavController,
+    imageModifier: Modifier,
+    textModifier: Modifier,
+    frameModifier : Modifier
 ) {
     val context = LocalContext.current
 
@@ -67,7 +71,7 @@ fun Player(
 
     Column(
         verticalArrangement = Arrangement.SpaceBetween,
-        modifier = Modifier
+        modifier = frameModifier
             .fillMaxSize()
             .background(Color.Black)
     ) {
@@ -107,7 +111,9 @@ fun Player(
                 model = artworkModel,
                 contentDescription = "Album Art for ${displaySong.title}",
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
+                modifier = imageModifier
+                    .fillMaxSize()
+
             )
         }
 
@@ -143,7 +149,7 @@ fun Player(
                         fontSize = 18.sp,
                         overflow = TextOverflow.Ellipsis,
                         maxLines = 1,
-                        modifier = Modifier.fillMaxWidth(0.9f)
+                        modifier = textModifier.fillMaxWidth(0.9f)
                     )
                     Text(
                         text = artistText,

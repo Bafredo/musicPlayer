@@ -95,7 +95,9 @@ fun Explore(
             }
 
             SectionHeader("Must try")
-            SongCarousel(dataViewModel.recommended)
+            SongCarousel(dataViewModel.recommended){it  ->
+                dataViewModel.playSong(context,it,dataViewModel.recommended)
+            }
 
             Spacer(Modifier.height(120.dp))
         }

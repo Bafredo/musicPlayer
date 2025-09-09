@@ -54,10 +54,13 @@ import com.muyoma.thapab.R
 @Composable
 fun FloatingMusicTracker(
     song: Song,isLiked : Boolean,
+    imagemodifier : Modifier,
+    textmodifier : Modifier,
     pause: () -> Unit,
     play: () -> Unit,
     liked :(Song)->Unit,
-    clicked: (Song)->Unit
+    clicked: (Song)->Unit,
+    frameModifier : Modifier
 ) {
     var currentPosition by remember { mutableStateOf(0f) }
     var duration by remember { mutableStateOf(1f) } // Default to 1 to avoid 0..0 crash
@@ -78,7 +81,7 @@ fun FloatingMusicTracker(
     }
 
     Row(
-        modifier = Modifier
+        modifier = frameModifier
             .fillMaxWidth()
             .fillMaxHeight(0.1f)
             .padding(10.dp, 5.dp)
@@ -101,11 +104,12 @@ fun FloatingMusicTracker(
             AsyncImage(
                 model = song.albumArtUri ?: song.coverResId,
                 contentDescription = song.title,
-                modifier = Modifier
+                modifier = imagemodifier
                     .width(55.dp)
                     .height(55.dp)
                     .clip(RoundedCornerShape(12.dp))
                     .border(1.dp, Color.LightGray, RoundedCornerShape(12.dp))
+
             )
 
             Column {
@@ -113,7 +117,7 @@ fun FloatingMusicTracker(
                     text = song.title,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.width(130.dp)
+                    modifier = textmodifier.width(130.dp)
                 )
                 Spacer(modifier = Modifier.height(10.dp))
 
