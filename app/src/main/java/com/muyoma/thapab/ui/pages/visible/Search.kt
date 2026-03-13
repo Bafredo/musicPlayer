@@ -137,7 +137,7 @@ fun Search(dataViewModel: DataViewModel) {
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.Center
             ) {
-                listOf("All", "Local Files", "Online (YouTube)").forEach { filter ->
+                listOf("All", "Local Files", "Online").forEach { filter ->
                     FilterChip(
                         selected = false, // You can make this dynamic if implementing filter logic
                         onClick = { /* handle filter */ },
@@ -208,7 +208,7 @@ fun Search(dataViewModel: DataViewModel) {
                 if (localSearchResults.isEmpty() && youtubeSearchResults.isEmpty() && searchQuery.isNotBlank()) {
                     item {
                         Text(
-                            "No local or online results found for \"$searchQuery\".",
+                            "No local results found for \"$searchQuery\".",
                             color = Color.Gray,
                             modifier = Modifier
                                 .fillMaxWidth()

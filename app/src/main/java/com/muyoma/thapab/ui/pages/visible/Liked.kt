@@ -39,7 +39,6 @@ import com.muyoma.thapab.viewmodel.DataViewModel
 @SuppressLint("ConfigurationScreenWidthHeight")
 @Composable
 fun Liked(dataViewModel: DataViewModel, navController: NavController) {
-    val displayImage = remember { mutableIntStateOf(0) }
     val songs = dataViewModel.getLikedSongs()
     val nowPlaying = dataViewModel.currentSong.collectAsState()
     val isPlaying = dataViewModel.isPlaying.collectAsState()
@@ -63,18 +62,6 @@ fun Liked(dataViewModel: DataViewModel, navController: NavController) {
                 .fillMaxSize()
                 .background(Color.Black)
         ) {
-            Image(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .fillMaxHeight(0.3f),
-                painter = painterResource(
-                    if (displayImage.intValue == 0) R.drawable.bg else displayImage.intValue
-                ),
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                alignment = Alignment.Center
-            )
-
             LazyColumn(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -90,15 +77,16 @@ fun Liked(dataViewModel: DataViewModel, navController: NavController) {
                         onMore = {
                             selectedSong.value = song
                             openDialog.value = true
+                        },
+                        onItemClick = {
+                            if (nowPlaying.value?.title != song.title) {
+                                dataViewModel.playSong(context, song, songs)
+                            } else if (!isPlaying.value) {
+                                dataViewModel.playSong(context, song, songs)
+                            }
+                            navController.navigate("player/${song.title}")
                         }
-                    ) { it ->
-                        if (nowPlaying.value?.title != song.title) {
-                            dataViewModel.playSong(context, song,songs)
-                        } else if (!isPlaying.value) {
-                            dataViewModel.playSong(context, song,songs)
-                        }
-                        navController.navigate("player/${song.title}")
-                    }
+                    )
                 }
                 item {
                     Spacer(modifier = Modifier.height(150.dp))

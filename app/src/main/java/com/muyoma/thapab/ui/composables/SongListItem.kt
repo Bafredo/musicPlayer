@@ -45,7 +45,7 @@ fun SongListItem(
     song: Song,
     playing: Boolean,
     onMore: () -> Unit,
-    changeImage: (Int) -> Unit
+    onItemClick: () -> Unit
 ) {
     Row(
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -59,16 +59,16 @@ fun SongListItem(
                 if (playing) Color.White else Color(0xAE161717),
                 RoundedCornerShape(12.dp)
             )
-            .pointerInput(Unit) {
-                detectTapGestures(
-                    onTap = { changeImage(song.coverResId) },
-                    onLongPress = { onMore() }
-                )
-            }
+            .clickable { onItemClick() }
             .padding(8.dp, 1.dp)
     ) {
         AsyncImage(
-            model = song.albumArtUri ?: song.coverResId,
+            model = ImageRequest.Builder(LocalContext.current)
+                .data(song.albumArtUri)
+                .placeholder(R.drawable.music)
+                .error(R.drawable.music)
+                .crossfade(true)
+                .build(),
             contentDescription = "Album Art for ${song.title}",
             contentScale = ContentScale.FillBounds,
             modifier = Modifier

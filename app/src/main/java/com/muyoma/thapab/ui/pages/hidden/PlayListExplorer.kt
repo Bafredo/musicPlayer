@@ -35,9 +35,6 @@ import com.muyoma.thapab.viewmodel.DataViewModel
 @SuppressLint("ConfigurationScreenWidthHeight")
 @Composable
 fun PlayListExplorer(dataViewModel: DataViewModel, navController: NavController, songs: List<Song>) {
-    val displayImage = remember { mutableIntStateOf(0) }
-
-
     val nowPlaying = dataViewModel.currentSong.collectAsState()
     val isPlaying = dataViewModel.isPlaying.collectAsState()
     val context = LocalContext.current
@@ -90,15 +87,16 @@ fun PlayListExplorer(dataViewModel: DataViewModel, navController: NavController,
                         onMore = {
                             selectedSong.value = song
                             openDialog.value = true
+                        },
+                        onItemClick = {
+                            if (nowPlaying.value?.title != song.title) {
+                                dataViewModel.playSong(context, song, songs)
+                            } else if (!isPlaying.value) {
+                                dataViewModel.playSong(context, song, songs)
+                            }
+                            navController.navigate("player/${song.title}")
                         }
-                    ) { it ->
-                        if (nowPlaying.value?.title != song.title) {
-                            dataViewModel.playSong(context, song,songs)
-                        } else if (!isPlaying.value) {
-                            dataViewModel.playSong(context, song,songs)
-                        }
-                        navController.navigate("player/${song.title}")
-                    }
+                    )
                 }
                 item {
                     Spacer(modifier = Modifier.height(70.dp))

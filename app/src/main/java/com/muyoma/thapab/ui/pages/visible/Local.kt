@@ -73,13 +73,14 @@ fun Local(dataViewModel: DataViewModel, navController: NavController) {
                 onMore = {
                     selectedSong.value = it
                     openDialog.value = true
+                },
+                onItemClick = {
+                    if (currentSong.value?.title != it.title || !isPlaying.value) {
+                        dataViewModel.playSong(context, it)
+                    }
+                    navController.navigate("player/${it.title}")
                 }
-            ) { clickedSong ->
-                if (currentSong.value?.title != it.title || !isPlaying.value) {
-                    dataViewModel.playSong(context, it)
-                }
-                navController.navigate("player/${it.title}")
-            }
+            )
         }
         item {
             Spacer(modifier = Modifier.height(150.dp))

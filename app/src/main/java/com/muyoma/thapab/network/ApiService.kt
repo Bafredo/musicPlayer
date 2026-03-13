@@ -17,7 +17,7 @@ import kotlinx.serialization.json.Json
 import android.util.Log // For Android's Log
 
 // Base URL for your Node.js backend
-const val BASE_URL = "https://muyoma.site"
+const val BASE_URL = "https://04b01ccb7a9d.ngrok-free.app"
 
 interface ApiService {
     suspend fun searchYoutubeVideo(query: String): YoutubeVideo
