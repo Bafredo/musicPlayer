@@ -1,18 +1,38 @@
 package com.muyoma.thapab.ui.pages.visible
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.runtime.*
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.muyoma.thapab.service.PlayerController
-import com.muyoma.thapab.ui.composables.*
+import com.muyoma.thapab.ui.composables.AlbumCarousel
+import com.muyoma.thapab.ui.composables.MadeForYouCard
+import com.muyoma.thapab.ui.composables.MadeForYouHeader
+import com.muyoma.thapab.ui.composables.MostPlayedCarousel
+import com.muyoma.thapab.ui.composables.PlayListDialog
+import com.muyoma.thapab.ui.composables.PlayListOptionsDialog
+import com.muyoma.thapab.ui.composables.PlayListSectionHeader
+import com.muyoma.thapab.ui.composables.PlayLister
+import com.muyoma.thapab.ui.composables.SectionHeader
+import com.muyoma.thapab.ui.composables.SongCarousel
 import com.muyoma.thapab.viewmodel.DataViewModel
 
 @Composable
@@ -21,8 +41,6 @@ fun Explore(
     navController: NavController
 ) {
     val context = LocalContext.current
-
-    // ✅ Collect once at top level
     val playLists by dataViewModel.playlists.collectAsState()
     val songs by dataViewModel.songs.collectAsState()
     val currentSong by dataViewModel.currentSong.collectAsState()
@@ -30,13 +48,14 @@ fun Explore(
     val selectedPlaylist by dataViewModel.selectedPlaylist.collectAsState()
     val isPlaying by PlayerController._isPlaying.collectAsState()
 
-    // ✅ Derive values with remember
     val artists = remember(songs) { songs.distinctBy { it.artist } }
-    val gradientBackground = remember {
-        Brush.verticalGradient(
-            listOf(Color(0xFF0F0F0F), Color(0xFF0F0F0F), Color.Black)
+    val gradientBackground = Brush.verticalGradient(
+        listOf(
+            MaterialTheme.colorScheme.background,
+            MaterialTheme.colorScheme.surfaceContainer,
+            MaterialTheme.colorScheme.surfaceContainerHighest
         )
-    }
+    )
 
     var showCreatePlaylist by remember { mutableStateOf(false) }
 
@@ -59,12 +78,12 @@ fun Explore(
 
             PlayListSectionHeader(
                 title = "Playlists",
-                add = { dataViewModel._showPlayListSheet.value = true }
+                add = { dataViewModel.togglePlaylistSheet(true) }
             )
 
             if (playLists.isNotEmpty()) {
                 PlayLister(
-                    playLists,
+                    playlists = playLists,
                     options = {
                         dataViewModel._selectedPlaylist.value = it
                         dataViewModel._openPlayListOptions.value = true
@@ -95,8 +114,8 @@ fun Explore(
             }
 
             SectionHeader("Must try")
-            SongCarousel(dataViewModel.recommended){it  ->
-                dataViewModel.playSong(context,it,dataViewModel.recommended)
+            SongCarousel(dataViewModel.recommended) { song ->
+                dataViewModel.playSong(context, song, dataViewModel.recommended)
             }
 
             Spacer(Modifier.height(120.dp))
@@ -107,8 +126,10 @@ fun Explore(
                 title = "Create Playlist",
                 onDismiss = { showCreatePlaylist = false }
             ) { name ->
-                dataViewModel.createPlaylist(name)
-                showCreatePlaylist = false
+                if (name.isNotBlank()) {
+                    dataViewModel.createPlaylist(name)
+                    showCreatePlaylist = false
+                }
             }
         }
 

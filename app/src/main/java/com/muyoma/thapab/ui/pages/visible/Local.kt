@@ -1,36 +1,26 @@
 package com.muyoma.thapab.ui.pages.visible
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.muyoma.thapab.models.Song
-import com.muyoma.thapab.ui.composables.OptionButton
-import com.muyoma.thapab.ui.composables.SectionHeader
 import com.muyoma.thapab.ui.composables.SongListItem
 import com.muyoma.thapab.ui.composables.SongOptionsDialog
 import com.muyoma.thapab.viewmodel.DataViewModel
@@ -38,11 +28,19 @@ import com.muyoma.thapab.viewmodel.DataViewModel
 @Composable
 fun Local(dataViewModel: DataViewModel, navController: NavController) {
     val context = LocalContext.current
-    val isPlaying = dataViewModel.isPlaying.collectAsState()
-    val currentSong = dataViewModel.currentSong.collectAsState()
-    val gradientBackground = Brush.verticalGradient(listOf(Color(0xFF0F0F0F), Color.Black))
+    val isPlaying by dataViewModel.isPlaying.collectAsState()
+    val currentSong by dataViewModel.currentSong.collectAsState()
+    val songs by dataViewModel.songs.collectAsState()
+    val isLibraryLoading by dataViewModel.isLibraryLoading.collectAsState()
+    val listState = rememberLazyListState()
+    val gradientBackground = Brush.verticalGradient(
+        listOf(
+            MaterialTheme.colorScheme.background,
+            MaterialTheme.colorScheme.surfaceContainer,
+            MaterialTheme.colorScheme.surfaceContainerHighest
+        )
+    )
 
-    // State to control dialog visibility and current selected song
     val openDialog = remember { mutableStateOf(false) }
     val selectedSong = remember { mutableStateOf<Song?>(null) }
 
@@ -54,10 +52,10 @@ fun Local(dataViewModel: DataViewModel, navController: NavController) {
             context = context,
             inPlayList = false
         )
-
     }
 
     LazyColumn(
+        state = listState,
         modifier = Modifier
             .fillMaxSize()
             .background(gradientBackground)
@@ -66,19 +64,33 @@ fun Local(dataViewModel: DataViewModel, navController: NavController) {
             Spacer(modifier = Modifier.height(60.dp))
         }
 
-        items(dataViewModel.songs.value) {
+        if (isLibraryLoading) {
+            item {
+                Text(
+                    text = "Loading your library...",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 24.dp)
+                )
+            }
+        }
+
+        items(
+            items = songs,
+            key = { song -> song.id },
+            contentType = { "song" }
+        ) { song ->
             SongListItem(
-                song = it,
-                playing = it.title == currentSong.value?.title,
+                song = song,
+                playing = song.id == currentSong?.id,
                 onMore = {
-                    selectedSong.value = it
+                    selectedSong.value = song
                     openDialog.value = true
                 },
                 onItemClick = {
-                    if (currentSong.value?.title != it.title || !isPlaying.value) {
-                        dataViewModel.playSong(context, it)
+                    if (currentSong?.title != song.title || !isPlaying) {
+                        dataViewModel.playSong(context, song)
                     }
-                    navController.navigate("player/${it.title}")
+                    navController.navigate("player/${song.title}")
                 }
             )
         }
@@ -87,6 +99,4 @@ fun Local(dataViewModel: DataViewModel, navController: NavController) {
         }
     }
 }
-
-
 

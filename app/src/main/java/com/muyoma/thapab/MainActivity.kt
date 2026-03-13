@@ -3,6 +3,7 @@ package com.muyoma.thapab
 import android.Manifest
 import android.app.DownloadManager
 import android.content.*
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
@@ -11,7 +12,12 @@ import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.annotation.RequiresApi
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.BoundsTransform
@@ -20,6 +26,7 @@ import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.animation.core.ArcMode
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.keyframes
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -49,11 +56,13 @@ import com.muyoma.thapab.ui.pages.hidden.Player
 import com.muyoma.thapab.ui.pages.hidden.SongListExplorer
 import com.muyoma.thapab.ui.pages.visible.*
 import com.muyoma.thapab.ui.theme.AppTheme
+import com.muyoma.thapab.ui.theme.ThemeMode
+import com.muyoma.thapab.util.AppIntents
 import com.muyoma.thapab.viewmodel.AuthViewModel
 import com.muyoma.thapab.viewmodel.DataViewModel
-import kotlinx.coroutines.flow.MutableSharedFlow // IMPORTANT: New import
-import kotlinx.coroutines.flow.asSharedFlow   // IMPORTANT: New import
-import kotlinx.coroutines.launch // Important for coroutine scope within LaunchedEffect
+import com.muyoma.thapab.viewmodel.ThemeViewModel
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 
 class MainActivity : ComponentActivity() {
 
@@ -70,7 +79,6 @@ class MainActivity : ComponentActivity() {
 
 
     @OptIn(ExperimentalMaterial3Api::class, ExperimentalSharedTransitionApi::class)
-    @RequiresApi(Build.VERSION_CODES.S)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -78,17 +86,21 @@ class MainActivity : ComponentActivity() {
             override fun onReceive(context: Context, intent: Intent) {
                 if (intent.action == DownloadManager.ACTION_DOWNLOAD_COMPLETE) {
                     val downloadId = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1L)
-
-                    // Optionally verify the downloadId is one you started
-                    Toast.makeText(context, "Download complete (ID: $downloadId)", Toast.LENGTH_SHORT).show()
+                    if (::dataViewModel.isInitialized) {
+                        dataViewModel.handleDownloadCompleted(context, downloadId)
+                        Toast.makeText(context, "Download complete", Toast.LENGTH_SHORT).show()
+                    }
                 }
             }
         }
-        registerReceiver(downloadReceiver, IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE))
+        registerReceiverCompat(downloadReceiver, IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE))
 
 
         setContent {
-            AppTheme {
+            val themeViewModel: ThemeViewModel = viewModel()
+            val themeMode by themeViewModel.themeMode.collectAsState()
+
+            AppTheme(themeMode = themeMode) {
                 val authViewModel: AuthViewModel = viewModel()
                 dataViewModel = viewModel()
 
@@ -101,12 +113,15 @@ class MainActivity : ComponentActivity() {
 
                 val liked by dataViewModel.currentSongLiked.collectAsState()
                 val showPlayer by dataViewModel.showPlayer.collectAsState()
+                val librarySongs by dataViewModel.songs.collectAsState()
 
                 val systemUiController = rememberSystemUiController()
+                val systemBarColor = MaterialTheme.colorScheme.surface
+                val useDarkIcons = themeMode == ThemeMode.LIGHT
                 SideEffect {
                     systemUiController.setSystemBarsColor(
-                        color = Color.Black,
-                        darkIcons = false
+                        color = systemBarColor,
+                        darkIcons = useDarkIcons
                     )
                 }
 
@@ -146,53 +161,89 @@ class MainActivity : ComponentActivity() {
                         } else {
                             permissionLauncher.launch(Manifest.permission.READ_EXTERNAL_STORAGE)
                         }
+                    } else {
+                        dataViewModel.ensureSongsLoaded()
                     }
                 }
 
                 // --- START: Handle Intent from Notification ---
-                val activity = LocalContext.current as MainActivity // Cast to your specific Activity type
+                val activity = LocalContext.current as MainActivity
+                var pendingIntent by remember { mutableStateOf(activity.intent) }
 
-                // LaunchedEffect for the initial intent when the Activity is first created
-                LaunchedEffect(activity.intent) {
-                    // Process the initial intent if it's available
-                    activity.intent?.let { intent ->
-                        val songTitleToPlay = intent.getStringExtra("song_title_to_play")
-                        if (songTitleToPlay != null) {
-                            // Clear the extra so it's not processed again on recomposition or activity recreation
-                            intent.removeExtra("song_title_to_play")
-                            navController.navigate("player/$songTitleToPlay") {
-                                popUpTo(navController.graph.startDestinationId) { saveState = true }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                        }
+                fun navigateTo(route: String) {
+                    navController.navigate(route) {
+                        launchSingleTop = true
+                        restoreState = true
                     }
                 }
 
-                // LaunchedEffect to observe subsequent intents delivered via onNewIntent
+                fun processAppIntent(intent: Intent) {
+                    val destination = intent.getStringExtra(AppIntents.EXTRA_DESTINATION)
+                    val autoplay = intent.getBooleanExtra(AppIntents.EXTRA_AUTOPLAY, false)
+                    when {
+                        intent.action == "com.muyoma.thapab.OPEN_LIKED" -> {
+                            dataViewModel.playLikedSongs(context)
+                            navigateTo("liked")
+                        }
+
+                        intent.action == "com.muyoma.thapab.OPEN_LOCAL" -> navigateTo("local")
+
+                        intent.action == Intent.ACTION_VIEW && intent.data != null -> {
+                            val uri: Uri = intent.data ?: return
+                            dataViewModel.openAudioUri(
+                                context,
+                                uri,
+                                autoPlay = if (intent.hasExtra(AppIntents.EXTRA_AUTOPLAY)) autoplay else true
+                            )
+                            navigateTo("player")
+                        }
+
+                        destination == AppIntents.DESTINATION_LIKED -> {
+                            if (autoplay) {
+                                dataViewModel.playLikedSongs(context)
+                            }
+                            navigateTo("liked")
+                        }
+
+                        destination == AppIntents.DESTINATION_PLAYLIST -> {
+                            val playlistName = intent.getStringExtra(AppIntents.EXTRA_PLAYLIST_NAME) ?: return
+                            if (autoplay) {
+                                dataViewModel.playPlaylist(context, playlistName)
+                            }
+                            dataViewModel._selectedPlaylist.value = playlistName
+                            navigateTo("playlist/$playlistName")
+                        }
+
+                        destination == AppIntents.DESTINATION_LOCAL -> navigateTo("local")
+                        intent.getStringExtra(AppIntents.EXTRA_SONG_TITLE_TO_PLAY) != null -> navigateTo("player")
+                    }
+                }
+
                 LaunchedEffect(Unit) {
-                    // Collect from the SharedFlow that receives new intents
                     activity.newIntentFlow.collect { intent ->
-                        val songTitleToPlay = intent.getStringExtra("song_title_to_play")
-                        if (songTitleToPlay != null) {
-                            // Clear the extra from the new intent
-                            intent.removeExtra("song_title_to_play")
-                            navController.navigate("player/$songTitleToPlay") {
-                                popUpTo(navController.graph.startDestinationId) { saveState = true }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                        }
+                        pendingIntent = intent
                     }
                 }
-                // --- END: Handle Intent from Notification ---
 
-                
+                LaunchedEffect(pendingIntent, librarySongs.size) {
+                    val intent = pendingIntent ?: return@LaunchedEffect
+                    val needsLibrary = intent.getStringExtra(AppIntents.EXTRA_DESTINATION) == AppIntents.DESTINATION_PLAYLIST ||
+                        intent.getStringExtra(AppIntents.EXTRA_DESTINATION) == AppIntents.DESTINATION_LIKED ||
+                        intent.getStringExtra(AppIntents.EXTRA_SONG_TITLE_TO_PLAY) != null
+                    if (needsLibrary && librarySongs.isEmpty()) return@LaunchedEffect
+
+                    processAppIntent(intent)
+                    pendingIntent = null
+                    intent.removeExtra(AppIntents.EXTRA_SONG_TITLE_TO_PLAY)
+                    intent.removeExtra(AppIntents.EXTRA_DESTINATION)
+                    intent.removeExtra(AppIntents.EXTRA_PLAYLIST_NAME)
+                }
+
                 val textBoundsTransform = BoundsTransform { initialBounds, targetBounds ->
                     keyframes {
-                        durationMillis = 2000
+                        durationMillis = 550
                         initialBounds at 0 using ArcMode.ArcBelow using FastOutSlowInEasing
-                        targetBounds at 2000
+                        targetBounds at 550
                     }
                 }
 
@@ -200,7 +251,7 @@ class MainActivity : ComponentActivity() {
                 Scaffold(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(Color.Black)
+                        .background(MaterialTheme.colorScheme.background)
                 ) { innerPadding ->
                     Column(modifier = Modifier.padding(innerPadding)) {
                         SharedTransitionLayout {
@@ -215,6 +266,19 @@ class MainActivity : ComponentActivity() {
                                     composable("liked") { Liked(dataViewModel, navController) }
                                     composable("local") { Local(dataViewModel, navController) }
                                     composable("search") { Search(dataViewModel) }
+                                    composable("player") {
+                                        val song by dataViewModel.currentSong.collectAsState()
+                                        song?.let {
+                                            Player(
+                                                s = it,
+                                                dataViewModel = dataViewModel,
+                                                navController = navController,
+                                                imageModifier = Modifier,
+                                                textModifier = Modifier,
+                                                frameModifier = Modifier
+                                            )
+                                        }
+                                    }
                                     composable(
                                         "playlist/{$PLAYER_ARG_SONG_ID}",
                                         arguments = listOf(navArgument(PLAYER_ARG_SONG_ID) {
@@ -288,7 +352,11 @@ class MainActivity : ComponentActivity() {
 
                                 if (showBars) {
                                     Column(modifier = Modifier.align(Alignment.BottomCenter)) {
-                                        AnimatedVisibility(visible = showPlayer) {
+                                        AnimatedVisibility(
+                                            visible = showPlayer,
+                                            enter = fadeIn(tween(220)) + slideInVertically(tween(320)) { it / 2 } + scaleIn(tween(280), initialScale = 0.94f),
+                                            exit = fadeOut(tween(180)) + slideOutVertically(tween(240)) { it / 2 } + scaleOut(tween(200), targetScale = 0.94f)
+                                        ) {
                                             val currentPlayingSong by dataViewModel.currentSong.collectAsState()
                                             currentPlayingSong?.let { song ->
                                                 FloatingMusicTracker(
@@ -303,7 +371,9 @@ class MainActivity : ComponentActivity() {
                                                             dataViewModel.likeSong(it)
                                                     },
                                                     clicked = {
-                                                        navController.navigate("player/${it.title}")
+                                                        navController.navigate("player/${it.title}") {
+                                                            launchSingleTop = true
+                                                        }
                                                     },
                                                     imagemodifier = Modifier.sharedElement(
                                                         sharedContentState = rememberSharedContentState("song_${song.id}"),
@@ -330,8 +400,8 @@ class MainActivity : ComponentActivity() {
                                                 .background(
                                                     brush = Brush.verticalGradient(
                                                         colors = listOf(
-                                                            Color.Black,
-                                                            Color.Black,
+                                                            MaterialTheme.colorScheme.surface,
+                                                            MaterialTheme.colorScheme.surface,
                                                             Color.Transparent
                                                         ),
                                                         startY = Float.POSITIVE_INFINITY,
@@ -339,7 +409,9 @@ class MainActivity : ComponentActivity() {
                                                     )
                                                 )
                                                 .padding(horizontal = 18.dp),
-                                            navController = navController
+                                            navController = navController,
+                                            themeMode = themeMode,
+                                            onThemeToggle = themeViewModel::cycleThemeMode
                                         )
                                     }
                                 }
@@ -402,7 +474,12 @@ class MainActivity : ComponentActivity() {
                     }
                     PlayerService.BROADCAST_ACTION_NEXT,
                     PlayerService.BROADCAST_ACTION_PREV -> {
-                        val song = intent.getParcelableExtra<Song>("song")
+                        val song = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            intent.getParcelableExtra("song", Song::class.java)
+                        } else {
+                            @Suppress("DEPRECATION")
+                            intent.getParcelableExtra<Song>("song")
+                        }
                         song?.let {
                             dataViewModel._currentSong.value = it
                             // _isPlaying updated by PlayerController directly
@@ -419,7 +496,7 @@ class MainActivity : ComponentActivity() {
             addAction(PlayerService.BROADCAST_ACTION_PREV)
         }
 
-        registerReceiver(playerStateReceiver, filter)
+        registerReceiverCompat(playerStateReceiver, filter)
     }
 
     // This is the actual Android Activity lifecycle method to override
@@ -433,7 +510,16 @@ class MainActivity : ComponentActivity() {
 
 
     override fun onDestroy() {
+        unregisterReceiver(downloadReceiver)
         unregisterReceiver(playerStateReceiver)
         super.onDestroy()
+    }
+
+    private fun registerReceiverCompat(receiver: BroadcastReceiver, filter: IntentFilter) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            registerReceiver(receiver, filter)
+        }
     }
 }

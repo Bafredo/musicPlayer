@@ -1,12 +1,15 @@
 package com.muyoma.thapab.viewmodel
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Application
 import android.app.DownloadManager
 import android.content.ContentUris
 import android.content.Context
 import android.content.Intent
-import android.net.Uri // Import Uri
+import android.content.pm.PackageManager
+import android.media.MediaScannerConnection
+import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
@@ -14,14 +17,18 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
+import androidx.core.database.getStringOrNull
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.muyoma.thapab.R
 import com.muyoma.thapab.data.DBHandler
+import com.muyoma.thapab.data.MusicLibraryRepository
 import com.muyoma.thapab.models.Playlist
 import com.muyoma.thapab.models.Song
 import com.muyoma.thapab.service.PlayerController
 import com.muyoma.thapab.service.PlayerService
+import com.muyoma.thapab.service.RepeatMode
+import com.muyoma.thapab.util.ShortcutHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -29,22 +36,18 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.collections.emptyList
-import android.util.Log // Import for Android's Log
+import android.util.Log
 
-// Ktor Client imports
 import com.muyoma.thapab.network.ApiService
 import com.muyoma.thapab.network.ApiServiceImpl
-import com.muyoma.thapab.network.models.YoutubeVideo // Import your Ktor models
-import java.net.URLEncoder
-import androidx.core.net.toUri
+import com.muyoma.thapab.network.models.YoutubeVideo
 
 class DataViewModel(application: Application) : AndroidViewModel(application) {
 
-    // Use the singleton instance of DBHandler
     private val dbHandler: DBHandler = DBHandler.getInstance(application.applicationContext)
-
-    // Ktor API Service instance
-    private val apiService: ApiService = ApiServiceImpl() // Initialize your API service
+    private val apiService: ApiService = ApiServiceImpl()
+    private val pendingDownloads = mutableMapOf<Long, String>()
+    private var hasLoadedSongs = false
 
     var _songs = MutableStateFlow<List<Song>>(emptyList())
     var songs: StateFlow<List<Song>> = _songs.asStateFlow()
@@ -74,8 +77,8 @@ class DataViewModel(application: Application) : AndroidViewModel(application) {
     var _selectedPlaylist = MutableStateFlow<String?>(null)
     val selectedPlaylist: StateFlow<String?> = _selectedPlaylist.asStateFlow()
 
-    val _repeatSong = MutableStateFlow<Boolean>(false)
-    val repeatSong = _repeatSong.asStateFlow()
+    val repeatMode = PlayerController.repeatMode
+    val shuffleEnabled = PlayerController.shuffleEnabled
 
     var _currentList = MutableStateFlow<List<Song>>(songs.value)
     val currentList: StateFlow<List<Song>> = _currentList.asStateFlow()
@@ -89,7 +92,14 @@ class DataViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _apiErrorMessage = MutableStateFlow<String?>(null)
     val apiErrorMessage = _apiErrorMessage.asStateFlow()
-    // ---------------------------------
+    private val _isLibraryLoading = MutableStateFlow(false)
+    val isLibraryLoading = _isLibraryLoading.asStateFlow()
+
+    private val _isOnlineSearchLoading = MutableStateFlow(false)
+    val isOnlineSearchLoading = _isOnlineSearchLoading.asStateFlow()
+
+    private val _activeDownloadTitle = MutableStateFlow<String?>(null)
+    val activeDownloadTitle = _activeDownloadTitle.asStateFlow()
 
 
     fun togglePlaylistSheet(show: Boolean) {
@@ -106,11 +116,7 @@ class DataViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     init {
-        viewModelScope.launch(Dispatchers.IO) {
-            getAllSongs(application.applicationContext)
-            refreshLikedSongs()
-            loadPlaylistsFromDB(songs.value)
-        }
+        ensureSongsLoaded()
 
         viewModelScope.launch {
             PlayerController._isPlaying.collect { isPlaying ->
@@ -198,128 +204,128 @@ class DataViewModel(application: Application) : AndroidViewModel(application) {
         )
     }
 
-    fun repeatSong(s: Song) {
-        _repeatSong.value = true
+    fun cycleRepeatMode(): RepeatMode {
+        return PlayerController.cycleRepeatMode()
     }
 
-    fun undoRepeat() {
-        _repeatSong.value = false
+    fun setRepeatMode(mode: RepeatMode) {
+        PlayerController.setRepeatMode(mode)
     }
 
-    fun toggleRepeat() {
-        _repeatSong.value = !_repeatSong.value
+    fun toggleShuffle(): Boolean {
+        return PlayerController.toggleShuffle()
+    }
+
+    fun ensureSongsLoaded(forceRefresh: Boolean = false) {
+        val context = getApplication<Application>().applicationContext
+        if (hasAudioPermission(context)) {
+            getAllSongs(context, forceRefresh)
+        }
+    }
+
+    private fun hasAudioPermission(context: Context): Boolean {
+        val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            Manifest.permission.READ_MEDIA_AUDIO
+        } else {
+            Manifest.permission.READ_EXTERNAL_STORAGE
+        }
+        return ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
     }
 
     @SuppressLint("Recycle")
-    fun getAllSongs(context: Context) {
+    fun getAllSongs(context: Context, forceRefresh: Boolean = false) {
+        if (_isLibraryLoading.value) return
+        if (hasLoadedSongs && !forceRefresh && songs.value.isNotEmpty()) return
+        if (!hasAudioPermission(context)) return
+
+        _isLibraryLoading.value = true
         viewModelScope.launch(Dispatchers.IO) {
-            val songList = mutableListOf<Song>()
-            val collection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
-            } else {
-                MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
-            }
-
-            val projection = arrayOf(
-                MediaStore.Audio.Media._ID,
-                MediaStore.Audio.Media.TITLE,
-                MediaStore.Audio.Media.ARTIST,
-                MediaStore.Audio.Media.DURATION,
-                MediaStore.Audio.Media.ALBUM_ID
-            )
-
-            val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0"
-            val sortOrder = "${MediaStore.Audio.Media.TITLE} ASC"
-
-            context.contentResolver.query(
-                collection,
-                projection,
-                selection,
-                null,
-                sortOrder
-            )?.use { cursor ->
-                val idCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
-                val titleCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
-                val artistCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
-                val albumIdCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM_ID)
-
-                while (cursor.moveToNext()) {
-                    val id = cursor.getLong(idCol)
-                    val title = cursor.getString(titleCol) ?: "Unknown"
-                    val artist = cursor.getString(artistCol) ?: "Unknown"
-                    val albumId = cursor.getLong(albumIdCol)
-
-                    // ✅ Build proper content:// URI
-                    val contentUri = ContentUris.withAppendedId(
-                        MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id
-                    )
-
-                    // ✅ Resolve album art (with fallback)
-                    val albumArtUri = resolveAlbumArt(context, contentUri, albumId)
-
-                    val song = Song(
-                        id = id.toString(),
-                        title = title,
-                        artist = artist,
-                        data = contentUri.toString(), // store content:// URI instead of file path
-                        albumArtUri = albumArtUri
-                    )
-                    songList += song
+            try {
+                val songList = mutableListOf<Song>()
+                val collection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
+                } else {
+                    MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
                 }
-            }
 
-            withContext(Dispatchers.Main) {
-                _songs.value = songList
-                if (_currentSong.value == null && songList.isNotEmpty()) {
-                    _currentSong.value = songList.first()
+                val projection = arrayOf(
+                    MediaStore.Audio.Media._ID,
+                    MediaStore.Audio.Media.TITLE,
+                    MediaStore.Audio.Media.ARTIST,
+                    MediaStore.Audio.Media.DURATION,
+                    MediaStore.Audio.Media.ALBUM_ID
+                )
+
+                val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0"
+                val sortOrder = "${MediaStore.Audio.Media.TITLE} ASC"
+
+                context.contentResolver.query(
+                    collection,
+                    projection,
+                    selection,
+                    null,
+                    sortOrder
+                )?.use { cursor ->
+                    val idCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
+                    val titleCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
+                    val artistCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
+                    val albumIdCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM_ID)
+
+                    while (cursor.moveToNext()) {
+                        val id = cursor.getLong(idCol)
+                        val title = cursor.getString(titleCol) ?: "Unknown"
+                        val artist = cursor.getString(artistCol) ?: "Unknown"
+                        val albumId = cursor.getLong(albumIdCol)
+
+                        val contentUri = ContentUris.withAppendedId(
+                            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id
+                        )
+
+                        val song = Song(
+                            id = id.toString(),
+                            title = title,
+                            artist = artist,
+                            data = contentUri.toString(),
+                            albumArtUri = buildAlbumArtUri(albumId)
+                        )
+                        songList += song
+                    }
                 }
-                recommended = songList.take(5)
-                mostPopular = songList.takeLast(5)
-                mostPlayed = songList.shuffled().take(5)
+
+                withContext(Dispatchers.Main) {
+                    _songs.value = songList
+                    hasLoadedSongs = songList.isNotEmpty()
+                    if (_currentSong.value == null && songList.isNotEmpty()) {
+                        _currentSong.value = songList.first()
+                    }
+                    recommended = songList.take(5)
+                    mostPopular = songList.takeLast(5)
+                    mostPlayed = songList.shuffled().take(5)
+                }
+
+                refreshLikedSongs()
+                loadPlaylistsFromDB(songList)
+            } finally {
+                withContext(Dispatchers.Main) {
+                    _isLibraryLoading.value = false
+                }
             }
         }
     }
 
-
-    fun resolveAlbumArt(context: Context, songUri: Uri, albumId: Long): Uri? {
-        // MediaStore lookup
-        context.contentResolver.query(
-            MediaStore.Audio.Albums.EXTERNAL_CONTENT_URI,
-            arrayOf(MediaStore.Audio.Albums.ALBUM_ART),
-            "${MediaStore.Audio.Albums._ID}=?",
-            arrayOf(albumId.toString()),
+    private fun buildAlbumArtUri(albumId: Long): Uri? {
+        return if (albumId > 0) {
+            ContentUris.withAppendedId(ALBUM_ART_CONTENT_URI, albumId)
+        } else {
             null
-        )?.use { cursor ->
-            val artCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Albums.ALBUM_ART)
-            if (cursor.moveToFirst()) {
-                cursor.getString(artCol)?.let { path ->
-                    return Uri.parse("file://$path")
-                }
-            }
-        }
-
-        // Fallback: Embedded art
-        val retriever = android.media.MediaMetadataRetriever()
-        return try {
-            retriever.setDataSource(context, songUri)
-            retriever.embeddedPicture?.let { bytes ->
-                val file = java.io.File(context.cacheDir, "${songUri.lastPathSegment}.jpg")
-                java.io.FileOutputStream(file).use { out -> out.write(bytes) }
-                Uri.fromFile(file)
-            }
-        } catch (e: Exception) {
-            Log.w("DataViewModel", "No embedded album art for $songUri", e)
-            null
-        } finally {
-            retriever.release()
         }
     }
 
 
 
-    // MODIFIED: playSong to handle local files or streaming from your backend
     fun playSong(context: Context, song: Song, playlist: List<Song> = songs.value) {
-        // If the same song is already playing and it's a local file, do nothing
+        _currentList.value = if (playlist.isNotEmpty()) playlist else listOf(song)
+        PlayerController.setQueue(_currentList.value, song.id)
         if (PlayerController.isPlaying() && PlayerController.playingSong.value?.id == song.id) {
             Log.d("DataViewModel", "Song already playing, no need to restart service.")
             return
@@ -327,31 +333,13 @@ class DataViewModel(application: Application) : AndroidViewModel(application) {
 
         Log.d("DataViewModel", "Initiating playback for new song: ${song.title} from data: ${song.data}")
 
-        // Determine if the song is a local file or a remote URL (from your server)
-        val isLocalFile = try {
-            val uri = Uri.parse(song.data)
-            // Check if it's a file URI or content URI, indicating a local file
-            uri.scheme == "file" || uri.scheme == "content"
-        } catch (e: Exception) {
-            // If parsing fails, assume it's not a standard local file URI, might be a raw path or external URL
-            Log.e("DataViewModel", "Error parsing song.data as URI: ${song.data}", e)
-            false
-        }
-
-        // Call PlayerController to start playback
-        // PlayerController.play handles the MediaPlayer lifecycle
-        PlayerController.play(context, song)
-
-        // Update UI-related states immediately on the Main thread
-        _currentList.value = playlist
         _showPlayer.value = true
         _currentSong.value = song
 
-        // Start the PlayerService (even if local, to manage notification and background playback)
         val serviceIntent = Intent(context, PlayerService::class.java).apply {
             action = PlayerService.ACTION_PLAY
             putExtra(PlayerService.EXTRA_SONG, song)
-            putParcelableArrayListExtra(PlayerService.EXTRA_SONG_LIST, ArrayList(playlist))
+            putParcelableArrayListExtra(PlayerService.EXTRA_SONG_LIST, ArrayList(_currentList.value))
         }
         ContextCompat.startForegroundService(context, serviceIntent)
     }
@@ -384,27 +372,21 @@ class DataViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun playNext(context: Context) {
-        var index = currentList.value.indexOf(currentSong.value)
-        if (index == (currentList.value.size - 1)) {
-            _currentSong.value = currentList.value.first()
-        } else {
-            _currentSong.value = currentList.value[++index]
+        if (currentList.value.isEmpty()) return
+        val intent = Intent(context, PlayerService::class.java).apply {
+            action = PlayerService.ACTION_NEXT
+            putParcelableArrayListExtra(PlayerService.EXTRA_SONG_LIST, ArrayList(currentList.value))
         }
-        currentSong.value?.let { it ->
-            playSong(context, it, currentList.value)
-        }
+        ContextCompat.startForegroundService(context, intent)
     }
 
     fun playPrev(context: Context) {
-        var index = currentList.value.indexOf(currentSong.value)
-        if (index == 0) {
-            _currentSong.value = currentList.value.last()
-        } else {
-            _currentSong.value = currentList.value[--index]
+        if (currentList.value.isEmpty()) return
+        val intent = Intent(context, PlayerService::class.java).apply {
+            action = PlayerService.ACTION_PREV
+            putParcelableArrayListExtra(PlayerService.EXTRA_SONG_LIST, ArrayList(currentList.value))
         }
-        currentSong.value?.let { it ->
-            playSong(context, it, currentList.value)
-        }
+        ContextCompat.startForegroundService(context, intent)
     }
 
 
@@ -441,6 +423,10 @@ class DataViewModel(application: Application) : AndroidViewModel(application) {
             withContext(Dispatchers.Main) {
                 _playLists.value = loadedPlaylists
             }
+            ShortcutHelper.updateDynamicShortcuts(
+                getApplication<Application>().applicationContext,
+                loadedPlaylists.map { it.title }
+            )
         }
     }
 
@@ -454,8 +440,38 @@ class DataViewModel(application: Application) : AndroidViewModel(application) {
     fun getSongByTitle(title: String): Song? {
         return songs.value.find { it.title == title }
     }
+
+    fun getSongById(songId: String): Song? {
+        return songs.value.find { it.id == songId }
+    }
+
     fun getSongsByArtist(title : String) : List<Song>{
         return songs.value.filter { it.artist == title }
+    }
+
+    fun playLikedSongs(context: Context) {
+        val liked = getLikedSongs()
+        if (liked.isNotEmpty()) {
+            playSong(context, liked.first(), liked)
+        }
+    }
+
+    fun playPlaylist(context: Context, playlistName: String) {
+        val playlistSongs = getSongsFromPlaylist(playlistName)
+        if (playlistSongs.isNotEmpty()) {
+            _selectedPlaylist.value = playlistName
+            playSong(context, playlistSongs.first(), playlistSongs)
+        }
+    }
+
+    fun openAudioUri(context: Context, uri: Uri, autoPlay: Boolean = true) {
+        val externalSong = MusicLibraryRepository.createSongFromUri(context, uri)
+        _currentList.value = listOf(externalSong)
+        _currentSong.value = externalSong
+        _showPlayer.value = true
+        if (autoPlay) {
+            playSong(context, externalSong, listOf(externalSong))
+        }
     }
 
     fun cleanUpInvalidSongsInPlaylist(playlistName: String, allSongs: List<Song>) {
@@ -478,16 +494,19 @@ class DataViewModel(application: Application) : AndroidViewModel(application) {
      * Updates _youtubeSearchResults and _apiErrorMessage.
      */
     fun searchSongOnYouTube(query: String) {
-        _apiErrorMessage.value = null // Clear previous errors
-        _youtubeSearchResults.value = emptyList() // Clear previous results
+        _apiErrorMessage.value = null
+        _youtubeSearchResults.value = emptyList()
+        _isOnlineSearchLoading.value = true
         viewModelScope.launch {
             try {
                 val youtubeVideo = apiService.searchYoutubeVideo(query)
-                _youtubeSearchResults.value = listOf(youtubeVideo) // Assuming your backend returns max 1 result
+                _youtubeSearchResults.value = listOf(youtubeVideo)
                 Log.d("DataViewModel", "Youtube successful: ${youtubeVideo.title}")
             } catch (e: Exception) {
                 Log.e("DataViewModel", "Error searching YouTube: ${e.message}", e)
                 _apiErrorMessage.value = "Search failed: ${e.message}"
+            } finally {
+                _isOnlineSearchLoading.value = false
             }
         }
     }
@@ -498,43 +517,23 @@ class DataViewModel(application: Application) : AndroidViewModel(application) {
      * Note: This only starts the download on the server; actual completion needs further handling.
      */
     fun downloadYoutubeSong(youtubeVideo: YoutubeVideo) {
-        _apiErrorMessage.value = null // Clear previous errors
+        _apiErrorMessage.value = null
         _downloadStatus.value = "Starting download on server..."
         viewModelScope.launch {
             try {
                 val response = apiService.downloadAudio(youtubeVideo.videoId, youtubeVideo.title)
-                _downloadStatus.value = response.message // e.g., "Download started"
+                _downloadStatus.value = response.message
                 Log.d("DataViewModel", "Download initiated for ${youtubeVideo.title}: ${response.message}, file: ${response.file}")
-
-                // IMPORTANT: At this point, the file is only being downloaded ON YOUR SERVER.
-                // To play it on the app, you have two main options:
-                // 1. Stream it from your server using the /stream endpoint.
-                // 2. Download the MP3 file from your server to the Android device's local storage.
-
-                // Option 1: Stream the song immediately after download is initiated on server
-                // This assumes your PlayerController can handle network URLs.
-                // You'd need a Song object representing the streamable file.
-                // Example: Create a temporary Song object for streaming
                 val streamableSong = Song(
-                    id = "stream_${youtubeVideo.videoId}", // Unique ID for streamed song
+                    id = "stream_${youtubeVideo.videoId}",
                     title = youtubeVideo.title,
                     artist = "YouTube",
-                    data = apiService.getStreamUrl(response.file), // This is the URL for streaming
-                    coverResId = R.drawable.bg // Placeholder
+                    data = apiService.getStreamUrl(response.file),
+                    coverResId = R.drawable.bg
                 )
 
-                // You might want to ask the user if they want to stream or download
-                // For now, let's assume immediate streaming
                 Log.d("DataViewModel", "Attempting to stream from: ${streamableSong.data}")
                 playSong(getApplication<Application>().applicationContext, streamableSong, listOf(streamableSong))
-
-
-                // Option 2 (If you want to download to device):
-                // You would typically kick off an Android DownloadManager request here
-                // to pull the file from your /stream endpoint to local storage.
-                // After local download completes, then add to your local songs.
-                // This is more complex and out of scope for just integrating Ktor calls.
-
             } catch (e: Exception) {
                 Log.e("DataViewModel", "Error during download initiation: ${e.message}", e)
                 _downloadStatus.value = "Download initiation failed!"
@@ -542,30 +541,107 @@ class DataViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
     }
-    // ---------------------------------
+
+    fun downloadYoutubeSongToDevice(context: Context, youtubeVideo: YoutubeVideo) {
+        _apiErrorMessage.value = null
+        _activeDownloadTitle.value = youtubeVideo.title
+        _downloadStatus.value = "Preparing ${youtubeVideo.title} for download..."
+
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val response = apiService.downloadAudio(youtubeVideo.videoId, youtubeVideo.title)
+                val fileName = sanitizeFileName(youtubeVideo.title, youtubeVideo.videoId)
+                val request = DownloadManager.Request(Uri.parse(apiService.getStreamUrl(response.file))).apply {
+                    setTitle(youtubeVideo.title)
+                    setDescription("Saving to Music")
+                    setMimeType("audio/mpeg")
+                    setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                    setDestinationInExternalPublicDir(Environment.DIRECTORY_MUSIC, fileName)
+                    setAllowedOverMetered(true)
+                    setAllowedOverRoaming(true)
+                }
+
+                val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+                val downloadId = downloadManager.enqueue(request)
+                pendingDownloads[downloadId] = youtubeVideo.title
+
+                withContext(Dispatchers.Main) {
+                    _downloadStatus.value = "Downloading ${youtubeVideo.title}..."
+                }
+            } catch (e: Exception) {
+                Log.e("DataViewModel", "Error queueing device download: ${e.message}", e)
+                withContext(Dispatchers.Main) {
+                    _activeDownloadTitle.value = null
+                    _downloadStatus.value = null
+                    _apiErrorMessage.value = "Unable to download ${youtubeVideo.title}: ${e.message}"
+                }
+            }
+        }
+    }
 
     fun downloadMp3ToPhone(context: Context, videoId: String, title: String) {
-        val sanitizedTitle = title.replace(Regex("[<>:\"/\\\\|?*\\x00-\\x1F]"), "").take(80)
-        val fileName = "${sanitizedTitle}_$videoId.mp3"
-        val url = "http://muyoma.site/download-file?videoId=$videoId&title=${URLEncoder.encode(title, "UTF-8")}"
+        downloadYoutubeSongToDevice(context, YoutubeVideo(title = title, videoId = videoId, url = ""))
+    }
 
-        val request = DownloadManager.Request(Uri.parse(url)).apply {
-            setTitle("Downloading $title")
-            setDescription("Saving to Music folder")
-            setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-            setDestinationInExternalPublicDir(Environment.DIRECTORY_MUSIC, fileName)
-            setAllowedOverMetered(true)
-            setAllowedOverRoaming(true)
+    fun handleDownloadCompleted(context: Context, downloadId: Long) {
+        val requestedTitle = pendingDownloads.remove(downloadId) ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+            val query = DownloadManager.Query().setFilterById(downloadId)
+
+            var localUriString: String? = null
+            var successful = false
+            downloadManager.query(query)?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val statusIndex = cursor.getColumnIndex(DownloadManager.COLUMN_STATUS)
+                    val localUriIndex = cursor.getColumnIndex(DownloadManager.COLUMN_LOCAL_URI)
+                    successful = statusIndex >= 0 &&
+                        cursor.getInt(statusIndex) == DownloadManager.STATUS_SUCCESSFUL
+                    localUriString = if (localUriIndex >= 0) {
+                        cursor.getStringOrNull(localUriIndex)
+                    } else {
+                        null
+                    }
+                }
+            }
+
+            val scannedPath = localUriString?.let { Uri.parse(it).path }
+            if (successful && scannedPath != null) {
+                MediaScannerConnection.scanFile(
+                    context,
+                    arrayOf(scannedPath),
+                    arrayOf("audio/mpeg"),
+                    null
+                )
+                getAllSongs(context, forceRefresh = true)
+                withContext(Dispatchers.Main) {
+                    _downloadStatus.value = "$requestedTitle saved to Music"
+                    _activeDownloadTitle.value = null
+                }
+            } else {
+                withContext(Dispatchers.Main) {
+                    _downloadStatus.value = null
+                    _activeDownloadTitle.value = null
+                    _apiErrorMessage.value = "Download failed for $requestedTitle"
+                }
+            }
         }
-
-        val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-        downloadManager.enqueue(request)
-        getAllSongs(context)
     }
 
     fun clearYoutubeSearchResults() {
         _youtubeSearchResults.value = emptyList()
         _apiErrorMessage.value = null
-        _downloadStatus.value = null
+        if (_activeDownloadTitle.value == null) {
+            _downloadStatus.value = null
+        }
+    }
+
+    private fun sanitizeFileName(title: String, videoId: String): String {
+        val sanitizedTitle = title.replace(Regex("[<>:\"/\\\\|?*\\x00-\\x1F]"), "").take(80)
+        return "${sanitizedTitle}_$videoId.mp3"
+    }
+
+    private companion object {
+        val ALBUM_ART_CONTENT_URI: Uri = Uri.parse("content://media/external/audio/albumart")
     }
 }

@@ -13,8 +13,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Shuffle
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -60,7 +60,7 @@ fun Liked(dataViewModel: DataViewModel, navController: NavController) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black)
+                .background(MaterialTheme.colorScheme.background)
         ) {
             LazyColumn(
                 modifier = Modifier
@@ -105,9 +105,9 @@ fun Liked(dataViewModel: DataViewModel, navController: NavController) {
                     brush = Brush.verticalGradient(
                         colors = listOf(
                             Color.Transparent,
-                            Color.Black.copy(alpha = 0.6f),
-                            Color.Black,
-                            Color.Black.copy(alpha = 0.8f),
+                            MaterialTheme.colorScheme.surface.copy(alpha = 0.6f),
+                            MaterialTheme.colorScheme.surface,
+                            MaterialTheme.colorScheme.surface.copy(alpha = 0.8f),
                             Color.Transparent
                         ),
                         startY = Float.POSITIVE_INFINITY,
@@ -126,7 +126,7 @@ fun Liked(dataViewModel: DataViewModel, navController: NavController) {
                 Icon(
                     imageVector = Icons.Default.Shuffle,
                     contentDescription = null,
-                    tint = Color.White
+                    tint = MaterialTheme.colorScheme.onSurface
                 )
 
                 Icon(
@@ -135,10 +135,10 @@ fun Liked(dataViewModel: DataViewModel, navController: NavController) {
                     modifier = Modifier
                         .size(55.dp)
                         .clip(CircleShape)
-                        .background(Color(0x9E07F6F6))
+                        .background(MaterialTheme.colorScheme.primary)
                         .clickable { toggleMedia() }
                         .padding(8.dp),
-                    tint = Color.Black
+                    tint = MaterialTheme.colorScheme.onPrimary
                 )
             }
         }
@@ -152,7 +152,11 @@ fun Liked(dataViewModel: DataViewModel, navController: NavController) {
                 .fillMaxHeight(0.09f)
                 .background(
                     brush = Brush.verticalGradient(
-                        colors = listOf(Color.Black, Color.Black, Color.Transparent)
+                        colors = listOf(
+                            MaterialTheme.colorScheme.surface,
+                            MaterialTheme.colorScheme.surface,
+                            Color.Transparent
+                        )
                     )
                 )
                 .padding(17.dp, 4.dp)
@@ -170,5 +174,4 @@ fun Liked(dataViewModel: DataViewModel, navController: NavController) {
         }
     }
 }
-
 

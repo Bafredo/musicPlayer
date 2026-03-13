@@ -1,7 +1,6 @@
 package com.muyoma.thapab.ui.common
 
 import android.annotation.SuppressLint
-import android.media.MediaPlayer
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -22,12 +21,11 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -37,9 +35,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.muyoma.thapab.models.Song
 import com.muyoma.thapab.service.PlayerController
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import kotlin.math.abs
 
 @Composable
 fun MusicProgressTracker(
@@ -50,30 +45,13 @@ fun MusicProgressTracker(
     prev : ()->Unit
 
 ) {
-    var currentPosition by remember { mutableStateOf(0f) }
-    val mediaPlayer = PlayerController.mediaPlayer
-    mediaPlayer?.setOnCompletionListener {
-        next()
-    }
-    var isPlaying by remember { mutableStateOf(mediaPlayer?.isPlaying) }
-    val scope = rememberCoroutineScope()
+    val playbackPosition by PlayerController.playbackPosition.collectAsState()
+    val playerDuration by PlayerController.playbackDuration.collectAsState()
+    val isPlaying by PlayerController._isPlaying.collectAsState()
+    var sliderPosition by remember { mutableStateOf(0f) }
 
-
-    // Update the slider every 200ms
-    LaunchedEffect(Unit) {
-        while (true) {
-            if (mediaPlayer != null) {
-                scope.launch{
-                    if (PlayerController.isPlaying()) {
-                        currentPosition = if(PlayerController.getCurrentPosition() != null) PlayerController.getCurrentPosition()!! else 0f
-                        isPlaying = true
-                    } else {
-                        isPlaying = false
-                    }
-                }
-            }
-            delay(100L)
-        }
+    LaunchedEffect(playbackPosition) {
+        sliderPosition = playbackPosition
     }
 
     Column(
@@ -89,31 +67,31 @@ fun MusicProgressTracker(
             modifier = Modifier.fillMaxWidth()
         ) {
             Text(
-                text = formatTime(currentPosition.toInt()),
+                text = formatTime(sliderPosition.toInt()),
                 fontSize = 12.sp,
-                color = Color.White
+                color = MaterialTheme.colorScheme.onSurface
             )
             Slider(
-                value = currentPosition,
-                onValueChange = { currentPosition = it },
+                value = sliderPosition,
+                onValueChange = { sliderPosition = it },
                 onValueChangeFinished = {
-                    mediaPlayer?.seekTo(currentPosition.toInt())
+                    PlayerController.seekTo(sliderPosition.toInt())
                 },
-                valueRange = 0f..duration,
+                valueRange = 0f..playerDuration.coerceAtLeast(duration),
                 modifier = Modifier
                     .fillMaxWidth(0.7f)
                     .height(10.dp),
                 colors = SliderDefaults.colors(
-                    thumbColor = Color.White,
-                    activeTrackColor = Color.LightGray,
-                    inactiveTrackColor = Color.DarkGray,
+                    thumbColor = MaterialTheme.colorScheme.primary,
+                    activeTrackColor = MaterialTheme.colorScheme.primary,
+                    inactiveTrackColor = MaterialTheme.colorScheme.outlineVariant,
                     activeTickColor = Color.Transparent,
                     inactiveTickColor = Color.Transparent
                 )
             )
             Text(
-                text = formatTime(duration.toInt()),
-                color = Color.LightGray,
+                text = formatTime(playerDuration.coerceAtLeast(duration).toInt()),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 12.sp
             )
         }
@@ -129,51 +107,35 @@ fun MusicProgressTracker(
             Icon(
                 imageVector = Icons.Default.SkipPrevious,
                 contentDescription = "Previous",
-                tint = Color.White,
+                tint = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier
-                    .clickable {
-                        if (mediaPlayer != null) {
-                            prev()
-                        }
-
-                    }
+                    .clickable { prev() }
             )
 
             Icon(
-                imageVector = if (isPlaying == true) Icons.Default.Pause else Icons.Default.PlayArrow,
-                contentDescription = if (isPlaying == true) "Pause" else "Play",
+                imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                contentDescription = if (isPlaying) "Pause" else "Play",
                 modifier = Modifier
                     .padding(10.dp)
-                    .background(Color(0x9E07F6F6), CircleShape)
+                    .background(MaterialTheme.colorScheme.primary, CircleShape)
                     .clip(CircleShape)
                     .clickable {
-                        if (mediaPlayer != null) {
-                            if (mediaPlayer.isPlaying) {
-                                pause()
-                            } else {
-                                mediaPlayer.start()
-                            }
-                        }
-                        if (mediaPlayer != null) {
-                            isPlaying = mediaPlayer.isPlaying
+                        if (isPlaying) {
+                            pause()
+                        } else {
+                            PlayerController.currentSong.value?.let(play)
                         }
                     }
                     .padding(10.dp),
-                tint = Color.White,
+                tint = MaterialTheme.colorScheme.onPrimary,
 
             )
 
             Icon(
                 imageVector = Icons.Default.SkipNext,
                 contentDescription = "Next",
-                tint = Color.White,
-                modifier = Modifier
-                    .clickable {
-                        if (mediaPlayer != null) {
-                            next()
-                        }
-
-                    }
+                tint = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.clickable { next() }
             )
         }
     }
@@ -191,4 +153,3 @@ fun formatTime(milliseconds: Int): String {
         String.format("%02d:%02d:%02d", hours, minutes, seconds)
 
 }
-

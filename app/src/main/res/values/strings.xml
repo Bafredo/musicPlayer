@@ -1,3 +1,11 @@
 <resources>
     <string name="app_name">ThaPaB</string>
+    <string name="widget_idle_title">Ready to play</string>
+    <string name="widget_idle_subtitle">Tap play to start your selection</string>
+    <string name="widget_source_liked">Liked Songs</string>
+    <string name="widget_description">ThaPaB playback widget</string>
+    <string name="shortcut_liked_short">Liked</string>
+    <string name="shortcut_liked_long">Play liked songs</string>
+    <string name="shortcut_local_short">Library</string>
+    <string name="shortcut_local_long">Open local songs</string>
 </resources>

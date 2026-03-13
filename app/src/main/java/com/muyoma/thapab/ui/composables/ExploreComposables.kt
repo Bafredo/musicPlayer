@@ -45,7 +45,7 @@ fun SectionHeader(title: String, modifier: Modifier = Modifier) {
         text = title,
         style = MaterialTheme.typography.headlineSmall,
         fontWeight = FontWeight.ExtraBold,
-        color = Color.Gray,
+        color = MaterialTheme.colorScheme.onSurface,
         modifier = modifier.padding(12.dp, 4.dp)
     )
 }
@@ -67,11 +67,15 @@ fun PlayListSectionHeader(
             text = title,
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.ExtraBold,
-            color = Color.Gray,
+            color = MaterialTheme.colorScheme.onSurface,
             modifier = modifier.padding(bottom = 8.dp)
         )
         IconButton(onClick = add) {
-            Icon(imageVector = Icons.Default.MoreVert, contentDescription = null)
+            Icon(
+                imageVector = Icons.Default.MoreVert,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
@@ -89,7 +93,7 @@ fun PlayListDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         shape = RoundedCornerShape(20.dp),
-        containerColor = Color.Black,
+        containerColor = MaterialTheme.colorScheme.surface,
         tonalElevation = 8.dp,
         title = {
             Text(
@@ -216,7 +220,7 @@ fun SongCard(song: Song,play : ()->Unit) {
             .width(160.dp)
             .clickable { play() },
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E)),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(6.dp)
     ) {
         Column(
@@ -281,7 +285,7 @@ fun MostPlayedCard(song: Song, isPlaying: Boolean, play: () -> Unit) {
                 modifier = Modifier
                     .align(Alignment.BottomStart)
                     .fillMaxWidth()
-                    .background(Color(0x6B00010E))
+                    .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.45f))
             ) {
                 Column(modifier = Modifier.padding(5.dp)) {
                     Text(
@@ -301,12 +305,12 @@ fun MostPlayedCard(song: Song, isPlaying: Boolean, play: () -> Unit) {
                     )
                 }
                 Icon(
-                    tint = Color.Black,
+                    tint = MaterialTheme.colorScheme.onPrimary,
                     imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                     contentDescription = null,
                     modifier = Modifier
                         .padding(4.dp)
-                        .background(Color(0x9E07F6F6), CircleShape)
+                        .background(MaterialTheme.colorScheme.primary, CircleShape)
                         .padding(4.dp)
                 )
             }
@@ -333,13 +337,13 @@ fun AlbumCard(song: Song, playArtist: (String) -> Unit) {
                 contentScale = ContentScale.Crop
             )
             Icon(
-                tint = Color.LightGray,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 imageVector = Icons.Default.MusicNote,
                 contentDescription = null,
                 modifier = Modifier
                     .align(Alignment.Center)
                     .padding(4.dp)
-                    .background(Color(0xBF000000), CircleShape)
+                    .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.72f), CircleShape)
                     .padding(10.dp)
             )
         }
@@ -347,7 +351,7 @@ fun AlbumCard(song: Song, playArtist: (String) -> Unit) {
             text = song.artist,
             fontWeight = FontWeight.Light,
             fontSize = 14.sp,
-            color = Color.LightGray,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
             modifier = Modifier.fillMaxWidth(),
         )

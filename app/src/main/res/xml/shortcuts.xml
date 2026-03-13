@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:enabled="true"
+        android:icon="@drawable/music"
+        android:shortcutDisabledMessage="@string/shortcut_liked_long"
+        android:shortcutId="liked_songs"
+        android:shortcutLongLabel="@string/shortcut_liked_long"
+        android:shortcutShortLabel="@string/shortcut_liked_short">
+        <intent
+            android:action="com.muyoma.thapab.OPEN_LIKED"
+            android:targetClass="com.muyoma.thapab.MainActivity"
+            android:targetPackage="com.muyoma.thapab" />
+    </shortcut>
+    <shortcut
+        android:enabled="true"
+        android:icon="@drawable/music"
+        android:shortcutDisabledMessage="@string/shortcut_local_long"
+        android:shortcutId="local_library"
+        android:shortcutLongLabel="@string/shortcut_local_long"
+        android:shortcutShortLabel="@string/shortcut_local_short">
+        <intent
+            android:action="com.muyoma.thapab.OPEN_LOCAL"
+            android:targetClass="com.muyoma.thapab.MainActivity"
+            android:targetPackage="com.muyoma.thapab" />
+    </shortcut>
+</shortcuts>

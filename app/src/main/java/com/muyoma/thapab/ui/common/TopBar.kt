@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -37,8 +38,8 @@ fun TopBar(){
             .background(
                 brush = Brush.verticalGradient(
                     colors = listOf(
-                        Color.Black,
-                        Color.Black,
+                        MaterialTheme.colorScheme.surface,
+                        MaterialTheme.colorScheme.surface,
                         Color.Transparent
                     ),
 
@@ -48,7 +49,7 @@ fun TopBar(){
     ){
         Text(
             text = "ThaPaB",
-            color = Color.White,
+            color = MaterialTheme.colorScheme.onSurface,
             fontWeight = FontWeight.Bold,
             fontSize = 26.sp,
             modifier = Modifier
@@ -61,7 +62,7 @@ fun TopBar(){
                 .height(45.dp)
                 .aspectRatio(1f)
                 .fillMaxWidth()
-                .border(1.dp, Color.LightGray, CircleShape)
+                .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
                 .clip(CircleShape),
             contentScale = ContentScale.Crop
         )
